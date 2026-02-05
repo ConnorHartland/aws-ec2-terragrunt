@@ -3,9 +3,6 @@ set -euo pipefail
 
 echo "=== Cleaning up for AMI creation ==="
 
-# Remove packer scripts
-rm -rf /tmp/packer-scripts
-
 # Clear package cache
 sudo dnf clean all
 sudo rm -rf /var/cache/dnf/*

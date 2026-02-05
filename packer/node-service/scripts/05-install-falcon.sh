@@ -6,7 +6,7 @@ echo "=== Installing CrowdStrike Falcon sensor ==="
 # Falcon sensor should be pre-staged or pulled from internal S3
 # This assumes it's available at build time
 
-FALCON_TMP="/tmp/falcon-install"
+FALCON_TMP="/var/tmp/falcon-install"
 mkdir -p "$FALCON_TMP"
 
 # Try to get from S3 if available (bucket passed as env var)

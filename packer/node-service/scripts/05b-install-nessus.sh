@@ -4,7 +4,7 @@ set -euo pipefail
 echo "=== Installing Nessus Agent ==="
 
 # Nessus agent should be pre-staged or pulled from internal S3
-NESSUS_TMP="/tmp/nessus-install"
+NESSUS_TMP="/var/tmp/nessus-install"
 mkdir -p "$NESSUS_TMP"
 
 if [ -n "${NESSUS_S3_BUCKET:-}" ]; then
