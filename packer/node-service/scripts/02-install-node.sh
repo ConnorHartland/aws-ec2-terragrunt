@@ -3,8 +3,19 @@ set -euo pipefail
 
 echo "=== Installing Node.js ${NODE_VERSION} ==="
 
-# Install Node.js via NodeSource
-curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x | sudo bash -
+# Import NodeSource GPG key
+sudo rpm --import https://rpm.nodesource.com/gpgkey/nodesource-repo.gpg.key
+
+# Setup NodeSource repo for Node.js
+sudo tee /etc/yum.repos.d/nodesource.repo <<EOF
+[nodesource]
+name=Node.js Packages
+baseurl=https://rpm.nodesource.com/pub_${NODE_VERSION}.x/nodistro/nodejs/\$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.nodesource.com/gpgkey/nodesource-repo.gpg.key
+EOF
+
 sudo dnf install -y nodejs
 
 # Verify installation
