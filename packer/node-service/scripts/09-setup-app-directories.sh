@@ -3,8 +3,9 @@ set -euo pipefail
 
 echo "=== Setting up application directories ==="
 
-# Create nodeapp user (system user, no login shell)
-sudo useradd -r -s /sbin/nologin -d /opt/app nodeapp || true
+# Create nodeapp group and user (system user, no login shell)
+sudo groupadd -r nodeapp || true
+sudo useradd -r -g nodeapp -s /sbin/nologin -d /opt/app nodeapp || true
 
 # Create application directories
 sudo mkdir -p /opt/app
