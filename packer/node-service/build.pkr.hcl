@@ -59,11 +59,6 @@ variable "agents_s3_bucket" {
   default     = ""
 }
 
-variable "ami_name_prefix" {
-  type    = string
-  default = "node-service"
-}
-
 variable "vpc_id" {
   type        = string
   description = "VPC ID to launch builder instance in"
@@ -78,8 +73,8 @@ variable "subnet_id" {
 
 # Locals
 locals {
-  timestamp = regex_replace(timestamp(), "[- TZ:]", "")
-  ami_name  = "${var.ami_name_prefix}-${local.timestamp}"
+  build_date = formatdate("YYYYMMDD", timestamp())
+  ami_name   = "al2023-node${var.node_version}-cis-${local.build_date}"
 }
 
 # Data source to find base AMI
@@ -117,11 +112,14 @@ source "amazon-ebs" "node-service" {
 
   # Tags for the AMI
   tags = {
-    Name         = local.ami_name
-    BaseAMI      = data.amazon-ami.base.id
-    NodeVersion  = var.node_version
-    BuildTime    = timestamp()
-    ManagedBy    = "Packer"
+    Name           = local.ami_name
+    OS             = "Amazon Linux 2023"
+    CISLevel       = "2"
+    NodeVersion    = var.node_version
+    SecurityAgents = "Falcon,Nessus,Wazuh,NewRelic"
+    BaseAMI        = data.amazon-ami.base.id
+    BuildDate      = local.build_date
+    ManagedBy      = "Packer"
   }
 
   # Tags for snapshots
