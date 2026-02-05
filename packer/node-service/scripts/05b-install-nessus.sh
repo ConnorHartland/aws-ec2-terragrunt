@@ -7,12 +7,12 @@ echo "=== Installing Nessus Agent ==="
 NESSUS_TMP="/var/tmp/nessus-install"
 mkdir -p "$NESSUS_TMP"
 
-if [ -n "${NESSUS_S3_BUCKET:-}" ]; then
-  aws s3 cp "s3://${NESSUS_S3_BUCKET}/NessusAgent.rpm" "$NESSUS_TMP/NessusAgent.rpm" || true
+if [ -n "${AGENTS_S3_BUCKET:-}" ]; then
+  aws s3 cp "s3://${AGENTS_S3_BUCKET}/ness_agent.rpm" "$NESSUS_TMP/ness_agent.rpm" || true
 fi
 
-if [ -f "$NESSUS_TMP/NessusAgent.rpm" ]; then
-  sudo dnf install -y "$NESSUS_TMP/NessusAgent.rpm"
+if [ -f "$NESSUS_TMP/ness_agent.rpm" ]; then
+  sudo dnf install -y "$NESSUS_TMP/ness_agent.rpm"
   
   # Do NOT link here - done at boot with hostname
   # Disable auto-start

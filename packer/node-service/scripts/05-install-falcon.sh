@@ -10,8 +10,8 @@ FALCON_TMP="/var/tmp/falcon-install"
 mkdir -p "$FALCON_TMP"
 
 # Try to get from S3 if available (bucket passed as env var)
-if [ -n "${FALCON_S3_BUCKET:-}" ]; then
-  aws s3 cp "s3://${FALCON_S3_BUCKET}/falcon-sensor.rpm" "$FALCON_TMP/falcon-sensor.rpm" || true
+if [ -n "${AGENTS_S3_BUCKET:-}" ]; then
+  aws s3 cp "s3://${AGENTS_S3_BUCKET}/falcon-sensor.rpm" "$FALCON_TMP/falcon-sensor.rpm" || true
 fi
 
 if [ -f "$FALCON_TMP/falcon-sensor.rpm" ]; then

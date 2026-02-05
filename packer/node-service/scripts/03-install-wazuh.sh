@@ -3,33 +3,22 @@ set -euo pipefail
 
 echo "=== Installing Wazuh agent ==="
 
-# Download from internal repo (will be copied during build or pulled from S3)
-# For now, use official repo
-sudo rpm --import https://packages.wazuh.com/key/GPG-KEY-WAZUH
+WAZUH_TMP="/var/tmp/wazuh-install"
+mkdir -p "$WAZUH_TMP"
 
-cat << REPO | sudo tee /etc/yum.repos.d/wazuh.repo
-[wazuh]
-gpgcheck=1
-gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
-enabled=1
-name=EL-\$releasever - Wazuh
-baseurl=https://packages.wazuh.com/4.x/yum/
-protect=1
-REPO
+if [ -n "${AGENTS_S3_BUCKET:-}" ]; then
+  aws s3 cp "s3://${AGENTS_S3_BUCKET}/wazuh-agent.rpm" "$WAZUH_TMP/wazuh-agent.rpm" || true
+fi
 
-# Install without registering (registration happens at boot)
-sudo dnf install -y wazuh-agent
+if [ -f "$WAZUH_TMP/wazuh-agent.rpm" ]; then
+  sudo dnf install -y "$WAZUH_TMP/wazuh-agent.rpm"
 
-# Disable auto-start - registration happens in userdata
-sudo systemctl disable wazuh-agent
+  # Disable auto-start - registration happens in userdata
+  sudo systemctl disable wazuh-agent
 
-# Create deregister script for instance termination
-cat << 'DEREG' | sudo tee /var/local/scripts/deregister-wazuh-agent.sh
-#!/bin/bash
-# Wazuh deregistration is handled by the manager
-# This is a placeholder for any cleanup needed
-echo "Wazuh agent stopping - deregistration handled by manager"
-DEREG
-sudo chmod 755 /var/local/scripts/deregister-wazuh-agent.sh
+  echo "=== Wazuh agent installed (will register at boot) ==="
+else
+  echo "=== WARNING: Wazuh agent package not found ==="
+fi
 
-echo "=== Wazuh agent installed (will register at boot) ==="
+rm -rf "$WAZUH_TMP"

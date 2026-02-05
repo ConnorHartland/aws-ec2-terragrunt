@@ -53,9 +53,9 @@ variable "falcon_cid" {
   sensitive   = true
 }
 
-variable "nessus_s3_bucket" {
+variable "agents_s3_bucket" {
   type        = string
-  description = "S3 bucket containing Nessus agent RPM"
+  description = "S3 bucket containing security agent RPMs (Falcon, Nessus, Wazuh)"
   default     = ""
 }
 
@@ -167,7 +167,8 @@ build {
     remote_folder   = "/var/tmp"
     execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
-      "WAZUH_MANAGER_IP=${var.wazuh_manager_ip}"
+      "WAZUH_MANAGER_IP=${var.wazuh_manager_ip}",
+      "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
     ]
   }
 
@@ -185,7 +186,8 @@ build {
     remote_folder   = "/var/tmp"
     execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
-      "FALCON_CID=${var.falcon_cid}"
+      "FALCON_CID=${var.falcon_cid}",
+      "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
     ]
   }
 
@@ -194,7 +196,7 @@ build {
     remote_folder   = "/var/tmp"
     execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
-      "NESSUS_S3_BUCKET=${var.nessus_s3_bucket}"
+      "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
     ]
   }
 
