@@ -228,23 +228,6 @@ variable "lifecycle_hook_timeout" {
   default     = 300
 }
 
-# SSM Parameter Store configuration
-variable "app_version" {
-  description = "Initial app version to deploy (can be updated via SSM directly)"
-  type        = string
-  default     = "latest"
-}
-
-variable "ssm_parameters" {
-  description = "Map of SSM parameters to create for the service"
-  type = map(object({
-    value       = string
-    description = optional(string)
-    secure      = optional(bool, false)
-  }))
-  default = {}
-}
-
 # Stack/deployment identifier
 variable "stack_id" {
   description = "Stack identifier (e.g., 01, 02) for hostname generation"
