@@ -3,34 +3,30 @@ set -euo pipefail
 
 echo "=== Installing CrowdStrike Falcon sensor ==="
 
-# Note: Falcon sensor package typically needs to be downloaded from your Falcon console
-# or stored in a private S3 bucket. This script assumes it's available.
+# Falcon sensor should be pre-staged or pulled from internal S3
+# This assumes it's available at build time
 
-# Create temp directory for installer
 FALCON_TMP="/tmp/falcon-install"
 mkdir -p "$FALCON_TMP"
 
-# Option 1: Download from S3 (recommended for production)
-# aws s3 cp s3://your-security-bucket/falcon-sensor.rpm "$FALCON_TMP/falcon-sensor.rpm"
+# Try to get from S3 if available (bucket passed as env var)
+if [ -n "${FALCON_S3_BUCKET:-}" ]; then
+  aws s3 cp "s3://${FALCON_S3_BUCKET}/falcon-sensor.rpm" "$FALCON_TMP/falcon-sensor.rpm" || true
+fi
 
-# Option 2: Download from Falcon API (requires API credentials)
-# This is a placeholder - implement based on your Falcon deployment method
-
-# For now, check if package exists and install
 if [ -f "$FALCON_TMP/falcon-sensor.rpm" ]; then
   sudo dnf install -y "$FALCON_TMP/falcon-sensor.rpm"
   
-  # Configure CID
-  sudo /opt/CrowdStrike/falconctl -s --cid="${FALCON_CID}"
+  # Do NOT set CID here - done at boot with hostname
+  # sudo /opt/CrowdStrike/falconctl -s --cid="${FALCON_CID}"
   
-  # Disable auto-start during AMI build
+  # Disable auto-start - started after registration at boot
   sudo systemctl disable falcon-sensor
   
   echo "=== CrowdStrike Falcon sensor installed ==="
 else
-  echo "=== WARNING: Falcon sensor package not found, skipping installation ==="
-  echo "=== Ensure falcon-sensor.rpm is available during build ==="
+  echo "=== WARNING: Falcon sensor package not found ==="
+  echo "=== Ensure falcon-sensor.rpm is staged before build ==="
 fi
 
-# Cleanup
 rm -rf "$FALCON_TMP"

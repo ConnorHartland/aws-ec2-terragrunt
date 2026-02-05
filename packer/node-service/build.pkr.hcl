@@ -156,71 +156,85 @@ build {
   }
 
   # Run provisioning scripts in order
+  # Using execute_command to run through bash (avoids local file permission issues)
   provisioner "shell" {
-    script = "scripts/01-base-packages.sh"
+    script          = "scripts/01-base-packages.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   provisioner "shell" {
-    script = "scripts/02-install-node.sh"
+    script          = "scripts/02-install-node.sh"
+    execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
       "NODE_VERSION=${var.node_version}"
     ]
   }
 
   provisioner "shell" {
-    script = "scripts/03-install-wazuh.sh"
+    script          = "scripts/03-install-wazuh.sh"
+    execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
       "WAZUH_MANAGER_IP=${var.wazuh_manager_ip}"
     ]
   }
 
   provisioner "shell" {
-    script = "scripts/04-install-newrelic.sh"
+    script          = "scripts/04-install-newrelic.sh"
+    execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
       "NEWRELIC_LICENSE_KEY=${var.newrelic_license_key}"
     ]
   }
 
   provisioner "shell" {
-    script = "scripts/05-install-falcon.sh"
+    script          = "scripts/05-install-falcon.sh"
+    execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
       "FALCON_CID=${var.falcon_cid}"
     ]
   }
 
   provisioner "shell" {
-    script = "scripts/05b-install-nessus.sh"
+    script          = "scripts/05b-install-nessus.sh"
+    execute_command = "/bin/bash {{.Path}}"
     environment_vars = [
       "NESSUS_S3_BUCKET=${var.nessus_s3_bucket}"
     ]
   }
 
   provisioner "shell" {
-    script = "scripts/06-configure-nftables.sh"
+    script          = "scripts/06-configure-nftables.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   provisioner "shell" {
-    script = "scripts/07-setup-systemd-template.sh"
+    script          = "scripts/07-setup-systemd-template.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   provisioner "shell" {
-    script = "scripts/08-setup-ssl-base.sh"
+    script          = "scripts/08-setup-ssl-base.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   provisioner "shell" {
-    script = "scripts/09-setup-app-directories.sh"
+    script          = "scripts/09-setup-app-directories.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   provisioner "shell" {
-    script = "scripts/10-setup-maintenance-timers.sh"
+    script          = "scripts/10-setup-maintenance-timers.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   provisioner "shell" {
-    script = "scripts/11-setup-ad-leave-service.sh"
+    script          = "scripts/11-setup-ad-leave-service.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   provisioner "shell" {
-    script = "scripts/99-cleanup.sh"
+    script          = "scripts/99-cleanup.sh"
+    execute_command = "/bin/bash {{.Path}}"
   }
 
   # Output manifest

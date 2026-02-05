@@ -19,17 +19,43 @@ resource "aws_launch_template" "service" {
   )
 
   user_data = base64encode(templatefile("${path.module}/templates/userdata.sh.tpl", {
+    # Core
     service_name          = var.service_name
     environment           = var.environment
     aws_region            = data.aws_region.current.id
-    artifact_bucket       = var.artifact_bucket
-    ssl_bucket            = var.ssl_bucket
-    s3_ssl_paths          = var.s3_ssl_paths
-    wazuh_manager_ip      = var.wazuh_manager_ip
+    stack_id              = var.stack_id
     app_port              = var.app_port
     health_check_path     = var.health_check_path
     env_vars              = local.env_vars_string
     enable_lifecycle_hook = var.enable_lifecycle_hook
+
+    # S3 buckets and paths
+    artifact_bucket = var.artifact_bucket
+    ssl_bucket      = var.ssl_bucket
+    s3_ssl_paths    = var.s3_ssl_paths
+
+    # /etc/hosts entries
+    hosts_entries = var.hosts_entries
+
+    # Active Directory
+    join_active_directory = var.join_active_directory
+    ad_domain             = var.ad_domain
+    ad_domain_upper       = var.ad_domain_upper
+    ad_dns_servers        = var.ad_dns_servers
+    ad_user_ssm_param     = var.ad_user_ssm_param
+    ad_pass_ssm_param     = var.ad_pass_ssm_param
+
+    # Security agents
+    falcon_cid              = var.falcon_cid
+    nessus_key              = var.nessus_key
+    nessus_groups           = var.nessus_groups
+    wazuh_manager_ip        = var.wazuh_manager_ip
+    wazuh_manager_ssm_param = var.wazuh_manager_ssm_param
+    wazuh_agent_group       = var.wazuh_agent_group
+    newrelic_license_key    = var.newrelic_license_key
+
+    # Firewall
+    nftables_s3_path = var.nftables_s3_path
   }))
 
   # Require IMDSv2 for enhanced security

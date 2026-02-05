@@ -57,9 +57,9 @@ variable "desired_capacity" {
 
 # Application configuration
 variable "app_port" {
-  description = "Port the application listens on"
+  description = "Port the application listens on. Set to 0 for Kafka-only services with no HTTP listener."
   type        = number
-  default     = 3000
+  default     = 443
 }
 
 variable "health_check_path" {
@@ -243,4 +243,99 @@ variable "ssm_parameters" {
     secure      = optional(bool, false)
   }))
   default = {}
+}
+
+# Stack/deployment identifier
+variable "stack_id" {
+  description = "Stack identifier (e.g., 01, 02) for hostname generation"
+  type        = string
+  default     = "01"
+}
+
+# /etc/hosts entries
+variable "hosts_entries" {
+  description = "List of /etc/hosts entries to add (e.g., '10.0.1.1 kafka1.local')"
+  type        = list(string)
+  default     = []
+}
+
+# Active Directory configuration
+variable "join_active_directory" {
+  description = "Whether to join the instance to Active Directory"
+  type        = bool
+  default     = false
+}
+
+variable "ad_domain" {
+  description = "Active Directory domain to join (e.g., office.local)"
+  type        = string
+  default     = "office.local"
+}
+
+variable "ad_domain_upper" {
+  description = "Active Directory domain in uppercase (e.g., OFFICE.LOCAL)"
+  type        = string
+  default     = "OFFICE.LOCAL"
+}
+
+variable "ad_dns_servers" {
+  description = "Space-separated AD DNS server IPs"
+  type        = string
+  default     = "10.5.10.10 10.5.10.11"
+}
+
+variable "ad_user_ssm_param" {
+  description = "SSM parameter name for AD join username"
+  type        = string
+  default     = "/realm/aduser"
+}
+
+variable "ad_pass_ssm_param" {
+  description = "SSM parameter name for AD join password"
+  type        = string
+  default     = "/realm/adpass"
+}
+
+# Security agent configuration
+variable "falcon_cid" {
+  description = "CrowdStrike Falcon CID"
+  type        = string
+  default     = ""
+}
+
+variable "nessus_key" {
+  description = "Nessus agent linking key"
+  type        = string
+  default     = ""
+}
+
+variable "nessus_groups" {
+  description = "Nessus agent groups"
+  type        = string
+  default     = ""
+}
+
+variable "wazuh_agent_group" {
+  description = "Wazuh agent group"
+  type        = string
+  default     = "default"
+}
+
+variable "wazuh_manager_ssm_param" {
+  description = "SSM parameter name for Wazuh manager IP"
+  type        = string
+  default     = "/wazuh/manager"
+}
+
+variable "newrelic_license_key" {
+  description = "New Relic license key"
+  type        = string
+  default     = ""
+}
+
+# Firewall configuration
+variable "nftables_s3_path" {
+  description = "S3 path (relative to ssl_bucket) for nftables rules"
+  type        = string
+  default     = ""
 }

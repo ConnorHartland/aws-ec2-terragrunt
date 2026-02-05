@@ -1,15 +1,33 @@
 # Environment-level configuration for the dev environment
-# This file contains environment-specific settings
 
 locals {
   environment     = "dev"
   aws_region      = "us-east-1"
   ami_id          = "ami-0abcdef1234567890"
-  artifact_bucket = "dev-deployment-artifacts"
-  ssl_bucket      = "dev-ssl-certs"
+  artifact_bucket = "ffc-base-dev-01"
+  ssl_bucket      = "ffc-base-dev-01"
+  stack_id        = "01"
 
   # Security agent configuration
-  wazuh_manager_ip = "10.0.100.10"
+  wazuh_manager_ip     = ""  # Retrieved from SSM at boot
+  wazuh_agent_group    = "linux-nodes"
+  falcon_cid           = "877C55917E0E40908203C297B12712D7-1C"
+  nessus_key           = "7ca74966c3602ee994b5340683fcc984e33d6e5905746ba93b1c337ac2004892"
+  nessus_groups        = "dev-linux"
+  newrelic_license_key = ""  # Set in SSM or secrets manager
+
+  # Active Directory
+  join_active_directory = true
+  ad_domain             = "office.local"
+  ad_domain_upper       = "OFFICE.LOCAL"
+  ad_dns_servers        = "10.5.10.10 10.5.10.11 10.0.0.2"
+
+  # Kafka broker hosts for this environment
+  kafka_hosts = [
+    "10.0.13.52   kafkabrokerdev1.kafka",
+    "10.0.14.64   kafkabrokerdev2.kafka",
+    "10.0.16.137  kafkabrokerdev3.kafka",
+  ]
 
   # Network CIDRs for security group rules
   mongo_cidrs = ["10.0.10.0/24", "10.0.11.0/24"]

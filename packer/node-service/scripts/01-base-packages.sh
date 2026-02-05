@@ -7,7 +7,7 @@ echo "=== Installing base packages ==="
 sudo dnf update -y
 
 # Install essential packages
-sudo dnf install -y \
+sudo dnf install -y --allowerasing \
   jq \
   awscli \
   curl \
@@ -19,10 +19,11 @@ sudo dnf install -y \
   ca-certificates \
   nftables \
   chrony \
-  logrotate
+  logrotate \
+  systemd-sysv
 
 # Active Directory packages
-sudo dnf install -y \
+sudo dnf install -y --allowerasing \
   realmd \
   sssd \
   oddjob \

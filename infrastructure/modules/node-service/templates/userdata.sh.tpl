@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Log all output
 exec > >(tee /var/log/userdata.log) 2>&1
 
 echo "=== Starting userdata for ${service_name} ==="
@@ -14,14 +13,30 @@ AWS_REGION="${aws_region}"
 ARTIFACT_BUCKET="${artifact_bucket}"
 SSL_BUCKET="${ssl_bucket}"
 APP_PORT="${app_port}"
+STACK_ID="${stack_id}"
 ENABLE_LIFECYCLE_HOOK="${enable_lifecycle_hook}"
 
 # Get instance metadata (IMDSv2)
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
+INSTANCE_TYPE=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type)
+AMI_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/ami-id)
+
 echo "Instance ID: $INSTANCE_ID"
 echo "Private IP: $PRIVATE_IP"
+
+# =============================================================================
+# SET HOSTNAME
+# =============================================================================
+echo "=== Setting hostname ==="
+LAST_OCTET=$(echo "$PRIVATE_IP" | awk -F'.' '{print $4}')
+APPSHORT=$(echo "$SERVICE_NAME" | cut -c1-6)
+HOSTNAME="$${APPSHORT}$${ENVIRONMENT}$${STACK_ID}$${LAST_OCTET}"
+hostnamectl set-hostname "$HOSTNAME" --static
+echo "$PRIVATE_IP    $HOSTNAME" >> /etc/hosts
+echo "Hostname set to: $HOSTNAME"
 
 # =============================================================================
 # TAG EC2 INSTANCE
@@ -29,12 +44,45 @@ echo "Private IP: $PRIVATE_IP"
 echo "=== Tagging EC2 instance ==="
 aws ec2 create-tags \
   --resources "$INSTANCE_ID" \
-  --tags "Key=ServiceName,Value=$SERVICE_NAME" \
+  --tags "Key=Name,Value=$HOSTNAME" \
+         "Key=ServiceName,Value=$SERVICE_NAME" \
          "Key=Environment,Value=$ENVIRONMENT" \
+         "Key=StackId,Value=$STACK_ID" \
+         "Key=availability_zone,Value=$AZ" \
+         "Key=instance_type,Value=$INSTANCE_TYPE" \
+         "Key=ami,Value=$AMI_ID" \
   --region "$AWS_REGION"
 
 # =============================================================================
-# GET APP VERSION FROM SSM PARAMETER
+# CONFIGURE /etc/hosts ENTRIES
+# =============================================================================
+echo "=== Configuring /etc/hosts ==="
+%{ for entry in hosts_entries ~}
+echo "${entry}" >> /etc/hosts
+%{ endfor ~}
+
+# =============================================================================
+# CONFIGURE DNS FOR ACTIVE DIRECTORY
+# =============================================================================
+%{ if join_active_directory ~}
+echo "=== Configuring DNS for Active Directory ==="
+INTERFACE=$(ip route | grep default | awk '{print $5}')
+resolvectl dns "$INTERFACE" ${ad_dns_servers}
+resolvectl domain "$INTERFACE" ${ad_domain} ec2.internal
+
+# Create SSSD log directory
+mkdir -p /var/log/sssd
+
+# Join Active Directory
+echo "=== Joining Active Directory ==="
+ADUSER=$(aws ssm get-parameter --name "${ad_user_ssm_param}" --with-decryption --query Parameter.Value --output text --region "$AWS_REGION")
+ADPASS=$(aws ssm get-parameter --name "${ad_pass_ssm_param}" --with-decryption --query Parameter.Value --output text --region "$AWS_REGION")
+echo "$ADPASS" | realm join -v -U "$ADUSER@${ad_domain_upper}" ${ad_domain}
+unset ADUSER ADPASS
+%{ endif ~}
+
+# =============================================================================
+# GET APP VERSION AND PULL CODE FROM S3
 # =============================================================================
 echo "=== Getting app version from SSM ==="
 APP_VERSION=$(aws ssm get-parameter \
@@ -44,36 +92,31 @@ APP_VERSION=$(aws ssm get-parameter \
   --region "$AWS_REGION" 2>/dev/null || echo "latest")
 echo "App version: $APP_VERSION"
 
-# =============================================================================
-# PULL APP CODE FROM S3
-# =============================================================================
 echo "=== Pulling app code from S3 ==="
-aws s3 cp "s3://$ARTIFACT_BUCKET/$SERVICE_NAME/$APP_VERSION/app.tar.gz" /tmp/app.tar.gz --region "$AWS_REGION"
-tar -xzf /tmp/app.tar.gz -C /opt/app
-chown -R nodeapp:nodeapp /opt/app
-rm -f /tmp/app.tar.gz
+mkdir -p /opt/webapp
+aws s3 cp "s3://$ARTIFACT_BUCKET/$SERVICE_NAME/$APP_VERSION/build.zip" /tmp/build.zip --region "$AWS_REGION"
+unzip -o /tmp/build.zip -d /opt/webapp
+rm -f /tmp/build.zip
+chown -R nodeapp:nodeapp /opt/webapp
 
 # =============================================================================
-# PULL SSL CERTS AND KEYTABS FROM S3
+# PULL SSL CERTS FROM S3
 # =============================================================================
-echo "=== Pulling SSL certs and keytabs ==="
+echo "=== Pulling SSL certs ==="
+mkdir -p /var/local/ssl /var/local/ssl/wildcard /var/local/ssl/kafka
+
 %{ for ssl_path in s3_ssl_paths ~}
-echo "Fetching: ${ssl_path}"
-aws s3 cp "s3://$SSL_BUCKET/${ssl_path}" "/etc/pki/app/${ssl_path}" --region "$AWS_REGION"
+aws s3 cp "s3://$SSL_BUCKET/${ssl_path}" "/var/local/ssl/${ssl_path}" --region "$AWS_REGION" || true
 %{ endfor ~}
 
-# Set permissions on downloaded certs
-chown -R nodeapp:nodeapp /etc/pki/app/private /etc/pki/app/kafka /etc/pki/app/kerberos
-chmod 600 /etc/pki/app/private/* 2>/dev/null || true
-chmod 600 /etc/pki/app/kafka/* 2>/dev/null || true
-chmod 600 /etc/pki/app/kerberos/* 2>/dev/null || true
+chown -R nodeapp:nodeapp /var/local/ssl
+chmod 600 /var/local/ssl/kafka/* 2>/dev/null || true
 
 # =============================================================================
 # GENERATE ENV CONFIG
 # =============================================================================
 echo "=== Generating environment config ==="
 
-# Pull base config from Parameter Store
 aws ssm get-parameters-by-path \
   --path "/$SERVICE_NAME/$ENVIRONMENT" \
   --with-decryption \
@@ -81,66 +124,143 @@ aws ssm get-parameters-by-path \
   --query "Parameters[*].[Name,Value]" \
   --output text | while IFS=$'\t' read -r name value; do
     param_name=$(basename "$name")
-    echo "export $param_name=\"$value\"" >> /opt/app/.env
+    [ "$param_name" != "app-version" ] && echo "export $param_name=\"$value\"" >> /opt/webapp/.env
 done
 
-# Add Terraform-provided environment variables
-cat >> /opt/app/.env << 'ENVVARS'
+cat >> /opt/webapp/.env << ENVVARS
 ${env_vars}
 ENVVARS
 
-# Add standard environment variables
-cat >> /opt/app/.env << STDENV
+cat >> /opt/webapp/.env << STDENV
 export NODE_ENV=$ENVIRONMENT
 export PORT=$APP_PORT
 export SERVICE_NAME=$SERVICE_NAME
 export AWS_REGION=$AWS_REGION
 export INSTANCE_ID=$INSTANCE_ID
+export HOSTNAME=$HOSTNAME
 STDENV
 
-chown nodeapp:nodeapp /opt/app/.env
-chmod 600 /opt/app/.env
+chown nodeapp:nodeapp /opt/webapp/.env
+chmod 600 /opt/webapp/.env
 
 # =============================================================================
-# CONFIGURE NEW RELIC
+# CONFIGURE AND START CROWDSTRIKE
 # =============================================================================
-echo "=== Configuring New Relic ==="
-sudo sed -i "s/PLACEHOLDER_DISPLAY_NAME/$SERVICE_NAME-$INSTANCE_ID/" /etc/newrelic-infra.yml
-sudo sed -i "s/PLACEHOLDER_ENVIRONMENT/$ENVIRONMENT/" /etc/newrelic-infra.yml
-sudo sed -i "s/PLACEHOLDER_SERVICE/$SERVICE_NAME/" /etc/newrelic-infra.yml
-sudo systemctl enable newrelic-infra
-sudo systemctl start newrelic-infra
+%{ if falcon_cid != "" ~}
+echo "=== Configuring CrowdStrike ==="
+if [ -f /opt/CrowdStrike/falconctl ]; then
+  /opt/CrowdStrike/falconctl -s --cid="${falcon_cid}"
+  systemctl enable falcon-sensor
+  systemctl start falcon-sensor
+fi
+%{ endif ~}
 
 # =============================================================================
-# REGISTER WITH WAZUH MANAGER
+# CONFIGURE AND START NESSUS
 # =============================================================================
-echo "=== Registering with Wazuh manager ==="
-sudo /var/ossec/bin/agent-auth -m "${wazuh_manager_ip}" -A "$SERVICE_NAME-$INSTANCE_ID"
-sudo systemctl enable wazuh-agent
-sudo systemctl start wazuh-agent
+%{ if nessus_key != "" ~}
+echo "=== Configuring Nessus ==="
+if [ -f /opt/nessus_agent/sbin/nessuscli ]; then
+  systemctl start nessusagent
+  systemctl enable nessusagent
+  /opt/nessus_agent/sbin/nessuscli agent link \
+    --key="${nessus_key}" \
+    --groups="${nessus_groups}" \
+    --cloud
+fi
+%{ endif ~}
 
 # =============================================================================
-# CONFIGURE NFTABLES APP PORT
+# CONFIGURE AND START WAZUH
 # =============================================================================
-echo "=== Configuring firewall for app port ==="
-sudo sed "s/APP_PORT/$APP_PORT/" /etc/nftables.d/app-port.nft.template > /etc/nftables.d/app-port.nft
-sudo nft -f /etc/nftables.d/app-port.nft
-
-# =============================================================================
-# START CROWDSTRIKE FALCON
-# =============================================================================
-echo "=== Starting CrowdStrike Falcon ==="
-if systemctl list-unit-files | grep -q falcon-sensor; then
-  sudo systemctl enable falcon-sensor
-  sudo systemctl start falcon-sensor
+echo "=== Configuring Wazuh ==="
+if [ -f /var/ossec/bin/agent-auth ]; then
+  WAZUH_MANAGER=$(aws ssm get-parameter --name "${wazuh_manager_ssm_param}" --with-decryption --query Parameter.Value --output text --region "$AWS_REGION" 2>/dev/null || echo "${wazuh_manager_ip}")
+  
+  # Update ossec.conf with manager IP
+  sed -i "s|<address>.*</address>|<address>$WAZUH_MANAGER</address>|g" /var/ossec/etc/ossec.conf
+  
+  # Register with manager
+  /var/ossec/bin/agent-auth -m "$WAZUH_MANAGER" -A "$HOSTNAME" -G "${wazuh_agent_group}" || true
+  
+  systemctl daemon-reload
+  systemctl enable wazuh-agent
+  systemctl start wazuh-agent
 fi
 
 # =============================================================================
-# START APPLICATION
+# CONFIGURE AND START NEW RELIC
 # =============================================================================
-echo "=== Starting application ==="
-sudo systemctl enable "nodeapp@$SERVICE_NAME"
-sudo systemctl start "nodeapp@$SERVICE_NAME"
+echo "=== Configuring New Relic ==="
+FEATURES=$(aws ssm get-parameter --name "/$SERVICE_NAME/features" --with-decryption --query Parameter.Value --output text --region "$AWS_REGION" 2>/dev/null || echo "")
+
+cat > /etc/newrelic-infra.yml << NRCONFIG
+license_key: ${newrelic_license_key}
+display_name: $HOSTNAME
+custom_attributes:
+  environment: $ENVIRONMENT
+  application: $SERVICE_NAME
+  stack_id: $STACK_ID
+  features: $FEATURES
+log_file: /var/log/newrelic-infra/newrelic-infra.log
+NRCONFIG
+
+systemctl enable newrelic-infra
+systemctl start newrelic-infra
+
+# =============================================================================
+# CONFIGURE NFTABLES
+# =============================================================================
+echo "=== Configuring nftables ==="
+%{ if nftables_s3_path != "" ~}
+mkdir -p /var/local/scripts/firewall
+aws s3 sync "s3://$SSL_BUCKET/${nftables_s3_path}" /var/local/scripts/firewall --region "$AWS_REGION"
+if [ -f /var/local/scripts/firewall/ffc.rules ]; then
+  cp /var/local/scripts/firewall/ffc.rules /etc/nftables/ffc.rules
+  echo 'include "/etc/nftables/ffc.rules"' > /etc/sysconfig/nftables.conf
+  systemctl restart nftables
+fi
+%{ else ~}
+%{ if app_port > 0 ~}
+# Add app port rule
+nft add rule inet filter input tcp dport $APP_PORT accept 2>/dev/null || true
+%{ endif ~}
+%{ endif ~}
+
+# =============================================================================
+# CREATE AND START APPLICATION SERVICE
+# =============================================================================
+echo "=== Creating application service ==="
+cat > /etc/systemd/system/nodeapp.service << SERVICE
+[Unit]
+Description=$SERVICE_NAME Node.js Service
+After=network.target
+
+[Service]
+Type=simple
+User=nodeapp
+Group=nodeapp
+WorkingDirectory=/opt/webapp
+EnvironmentFile=/opt/webapp/.env
+ExecStart=/usr/bin/node /opt/webapp/dist/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=$SERVICE_NAME
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/webapp /var/log/app /var/local/ssl
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+systemctl daemon-reload
+systemctl enable nodeapp
+systemctl start nodeapp
 
 # =============================================================================
 # HEALTH CHECK
@@ -148,8 +268,11 @@ sudo systemctl start "nodeapp@$SERVICE_NAME"
 echo "=== Waiting for service health check ==="
 max_attempts=30
 attempt=0
+
+%{ if app_port > 0 ~}
+# HTTP/HTTPS health check
 while [ $attempt -lt $max_attempts ]; do
-  if curl -sf "http://localhost:$APP_PORT${health_check_path}" > /dev/null 2>&1; then
+  if curl -sfk "https://localhost:$APP_PORT${health_check_path}" > /dev/null 2>&1; then
     echo "Service is healthy!"
     break
   fi
@@ -157,10 +280,26 @@ while [ $attempt -lt $max_attempts ]; do
   sleep 10
   attempt=$((attempt + 1))
 done
+%{ else ~}
+# Process-based health check (no HTTP port)
+while [ $attempt -lt $max_attempts ]; do
+  if systemctl is-active --quiet nodeapp && pgrep -f "node.*/opt/webapp" > /dev/null; then
+    # Verify process has been stable for at least 5 seconds
+    sleep 5
+    if systemctl is-active --quiet nodeapp && pgrep -f "node.*/opt/webapp" > /dev/null; then
+      echo "Service is healthy (process running)!"
+      break
+    fi
+  fi
+  echo "Waiting for service... (attempt $((attempt + 1))/$max_attempts)"
+  sleep 10
+  attempt=$((attempt + 1))
+done
+%{ endif ~}
 
 if [ $attempt -eq $max_attempts ]; then
   echo "ERROR: Service did not become healthy"
-  sudo journalctl -u "nodeapp@$SERVICE_NAME" --no-pager -n 50 || true
+  journalctl -u nodeapp --no-pager -n 50 || true
   exit 1
 fi
 
@@ -181,7 +320,7 @@ if [ "$ENABLE_LIFECYCLE_HOOK" = "true" ]; then
       --auto-scaling-group-name "$ASG_NAME" \
       --lifecycle-action-result CONTINUE \
       --instance-id "$INSTANCE_ID" \
-      --region "$AWS_REGION" || echo "Lifecycle hook completion failed (may already be completed)"
+      --region "$AWS_REGION" || true
   fi
 fi
 
