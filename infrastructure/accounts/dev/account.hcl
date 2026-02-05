@@ -1,6 +1,5 @@
-# -----------------------------------------------------------------------------
-# Account-level Configuration for Development
-# -----------------------------------------------------------------------------
+# Account-level configuration for the development AWS account
+# This file contains account-specific settings used across all environments
 
 locals {
   account_id   = "123456789012"

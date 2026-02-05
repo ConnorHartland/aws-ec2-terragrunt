@@ -1,14 +1,11 @@
-# -----------------------------------------------------------------------------
-# Security Group for Node Service
-# -----------------------------------------------------------------------------
-
+# Security Group for the service instances
 resource "aws_security_group" "service" {
-  name        = "${var.service_name}-${var.environment}"
+  name_prefix = "${local.name_prefix}-"
   description = "Security group for ${var.service_name} service"
   vpc_id      = var.vpc_id
 
   tags = merge(local.common_tags, {
-    Name = "${var.service_name}-${var.environment}-sg"
+    Name = "${local.name_prefix}-sg"
   })
 
   lifecycle {
@@ -16,108 +13,113 @@ resource "aws_security_group" "service" {
   }
 }
 
-# -----------------------------------------------------------------------------
-# Ingress Rules
-# -----------------------------------------------------------------------------
-
-# Allow traffic from ALB on app port
-resource "aws_security_group_rule" "alb_ingress" {
+# Ingress rule from ALB (conditional)
+resource "aws_security_group_rule" "ingress_from_alb" {
   count = var.needs_alb ? 1 : 0
 
   type                     = "ingress"
   from_port                = var.app_port
   to_port                  = var.app_port
   protocol                 = "tcp"
-  source_security_group_id = var.alb_security_group_id
+  source_security_group_id = aws_security_group.alb[0].id
   security_group_id        = aws_security_group.service.id
   description              = "Allow traffic from ALB"
 }
 
-# -----------------------------------------------------------------------------
-# Egress Rules (using for_each pattern)
-# -----------------------------------------------------------------------------
-
+# Build egress rules map based on feature flags
 locals {
-  # Build egress rules map based on feature flags
   egress_rules = merge(
-    # HTTPS egress (443)
+    # HTTPS egress (for external API calls)
     var.needs_https_egress ? {
       https = {
         from_port   = 443
         to_port     = 443
         protocol    = "tcp"
         cidr_blocks = ["0.0.0.0/0"]
-        description = "Allow HTTPS egress"
+        description = "HTTPS outbound"
       }
     } : {},
 
-    # Kafka egress (9092, 9093, 9094)
+    # HTTP egress (for package managers, etc.)
+    var.needs_https_egress ? {
+      http = {
+        from_port   = 80
+        to_port     = 80
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+        description = "HTTP outbound"
+      }
+    } : {},
+
+    # Kafka egress
     var.needs_kafka && length(var.kafka_cidrs) > 0 ? {
-      kafka_9092 = {
+      kafka = {
         from_port   = 9092
-        to_port     = 9092
-        protocol    = "tcp"
-        cidr_blocks = var.kafka_cidrs
-        description = "Allow Kafka plaintext"
-      }
-      kafka_9093 = {
-        from_port   = 9093
-        to_port     = 9093
-        protocol    = "tcp"
-        cidr_blocks = var.kafka_cidrs
-        description = "Allow Kafka SSL"
-      }
-      kafka_9094 = {
-        from_port   = 9094
         to_port     = 9094
         protocol    = "tcp"
         cidr_blocks = var.kafka_cidrs
-        description = "Allow Kafka SASL"
+        description = "Kafka broker access"
       }
     } : {},
 
-    # MongoDB egress (27017)
+    # MongoDB egress
     var.needs_mongo && length(var.mongo_cidrs) > 0 ? {
       mongo = {
         from_port   = 27017
         to_port     = 27017
         protocol    = "tcp"
         cidr_blocks = var.mongo_cidrs
-        description = "Allow MongoDB access"
+        description = "MongoDB access"
       }
     } : {},
 
-    # SQL egress (5432 for PostgreSQL, 3306 for MySQL)
+    # SQL egress (PostgreSQL)
     var.needs_sql && length(var.sql_cidrs) > 0 ? {
-      postgres = {
+      postgresql = {
         from_port   = 5432
         to_port     = 5432
         protocol    = "tcp"
         cidr_blocks = var.sql_cidrs
-        description = "Allow PostgreSQL access"
+        description = "PostgreSQL access"
       }
+    } : {},
+
+    # SQL egress (MySQL)
+    var.needs_sql && length(var.sql_cidrs) > 0 ? {
       mysql = {
         from_port   = 3306
         to_port     = 3306
         protocol    = "tcp"
         cidr_blocks = var.sql_cidrs
-        description = "Allow MySQL access"
+        description = "MySQL access"
       }
     } : {},
 
-    # Redis egress (6379)
+    # Redis egress
     var.needs_redis && length(var.redis_cidrs) > 0 ? {
       redis = {
         from_port   = 6379
         to_port     = 6379
         protocol    = "tcp"
         cidr_blocks = var.redis_cidrs
-        description = "Allow Redis access"
+        description = "Redis access"
+      }
+    } : {},
+
+    # Dataiku egress
+    var.needs_dataiku && length(var.dataiku_cidrs) > 0 ? {
+      dataiku = {
+        from_port   = 443
+        to_port     = 443
+        protocol    = "tcp"
+        cidr_blocks = var.dataiku_cidrs
+        description = "Dataiku API access"
       }
     } : {}
   )
 }
 
+# Dynamic egress rules using for_each
 resource "aws_security_group_rule" "egress" {
   for_each = local.egress_rules
 
@@ -130,13 +132,23 @@ resource "aws_security_group_rule" "egress" {
   description       = each.value.description
 }
 
-# Allow HTTP egress for package managers and health checks
-resource "aws_security_group_rule" "http_egress" {
+# DNS egress (always needed)
+resource "aws_security_group_rule" "egress_dns_udp" {
   type              = "egress"
-  from_port         = 80
-  to_port           = 80
+  from_port         = 53
+  to_port           = 53
+  protocol          = "udp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.service.id
+  description       = "DNS UDP outbound"
+}
+
+resource "aws_security_group_rule" "egress_dns_tcp" {
+  type              = "egress"
+  from_port         = 53
+  to_port           = 53
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.service.id
-  description       = "Allow HTTP egress"
+  description       = "DNS TCP outbound"
 }

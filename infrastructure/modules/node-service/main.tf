@@ -1,19 +1,18 @@
-# -----------------------------------------------------------------------------
-# Data Sources
-# -----------------------------------------------------------------------------
-
+# Data sources
 data "aws_region" "current" {}
 
 data "aws_caller_identity" "current" {}
 
-# -----------------------------------------------------------------------------
+# CloudWatch Log Group for the service
+resource "aws_cloudwatch_log_group" "service" {
+  name              = local.log_group_name
+  retention_in_days = 30
+  tags              = local.common_tags
+}
+
 # Launch Template
-# -----------------------------------------------------------------------------
-
 resource "aws_launch_template" "service" {
-  name        = "${var.service_name}-${var.environment}-lt"
-  description = "Launch template for ${var.service_name} service"
-
+  name_prefix   = "${local.name_prefix}-"
   image_id      = var.ami_id
   instance_type = var.instance_type
 
@@ -26,7 +25,18 @@ resource "aws_launch_template" "service" {
     var.additional_security_group_ids
   )
 
-  # IMDSv2 required for security
+  user_data = base64encode(templatefile("${path.module}/templates/userdata.sh.tpl", {
+    service_name          = var.service_name
+    environment           = var.environment
+    aws_region            = data.aws_region.current.id
+    artifact_bucket       = var.artifact_bucket
+    app_port              = var.app_port
+    log_group_name        = local.log_group_name
+    env_vars              = local.env_vars_string
+    enable_lifecycle_hook = var.enable_lifecycle_hook
+  }))
+
+  # Require IMDSv2 for enhanced security
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -34,48 +44,33 @@ resource "aws_launch_template" "service" {
     instance_metadata_tags      = "enabled"
   }
 
+  # EBS optimization
+  ebs_optimized = true
+
   # Root volume configuration
   block_device_mappings {
     device_name = "/dev/xvda"
-
     ebs {
-      volume_size           = var.root_volume_size
-      volume_type           = var.root_volume_type
-      delete_on_termination = true
+      volume_size           = 30
+      volume_type           = "gp3"
       encrypted             = true
+      delete_on_termination = true
     }
   }
-
-  # User data script
-  user_data = base64encode(templatefile(
-    "${path.module}/templates/userdata.sh.tpl",
-    {
-      service_name           = var.service_name
-      environment            = var.environment
-      aws_region             = data.aws_region.current.id
-      app_port               = var.app_port
-      artifact_bucket        = var.artifact_bucket
-      environment_variables  = var.environment_variables
-      enable_lifecycle_hook  = var.enable_lifecycle_hook
-      asg_name               = "${var.service_name}-${var.environment}-asg"
-    }
-  ))
 
   # Tag specifications for instances
   tag_specifications {
     resource_type = "instance"
-
     tags = merge(local.common_tags, {
-      Name = "${var.service_name}-${var.environment}"
+      Name = "${local.name_prefix}-instance"
     })
   }
 
   # Tag specifications for volumes
   tag_specifications {
     resource_type = "volume"
-
     tags = merge(local.common_tags, {
-      Name = "${var.service_name}-${var.environment}-volume"
+      Name = "${local.name_prefix}-volume"
     })
   }
 

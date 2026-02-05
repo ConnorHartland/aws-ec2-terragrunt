@@ -1,7 +1,4 @@
-# -----------------------------------------------------------------------------
-# Core Variables
-# -----------------------------------------------------------------------------
-
+# Core service configuration
 variable "service_name" {
   description = "Name of the Node.js service"
   type        = string
@@ -22,6 +19,13 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
+variable "public_subnet_ids" {
+  description = "List of public subnet IDs for the ALB"
+  type        = list(string)
+  default     = []
+}
+
+# EC2/ASG configuration
 variable "ami_id" {
   description = "AMI ID for the EC2 instances"
   type        = string
@@ -51,8 +55,9 @@ variable "desired_capacity" {
   default     = 2
 }
 
+# Application configuration
 variable "app_port" {
-  description = "Port the Node.js application listens on"
+  description = "Port the application listens on"
   type        = number
   default     = 3000
 }
@@ -63,23 +68,26 @@ variable "health_check_path" {
   default     = "/health"
 }
 
-variable "path_patterns" {
-  description = "URL path patterns for ALB listener rule"
-  type        = list(string)
-  default     = ["/*"]
-}
-
 variable "artifact_bucket" {
   description = "S3 bucket containing deployment artifacts"
   type        = string
 }
 
-# -----------------------------------------------------------------------------
-# Feature Flags
-# -----------------------------------------------------------------------------
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS listener (optional)"
+  type        = string
+  default     = null
+}
 
+variable "path_patterns" {
+  description = "URL path patterns for ALB routing"
+  type        = list(string)
+  default     = ["/*"]
+}
+
+# Feature flags
 variable "needs_alb" {
-  description = "Whether the service needs ALB integration"
+  description = "Whether the service needs an Application Load Balancer"
   type        = bool
   default     = true
 }
@@ -109,27 +117,24 @@ variable "needs_kafka" {
 }
 
 variable "needs_https_egress" {
-  description = "Whether the service needs HTTPS egress"
+  description = "Whether the service needs HTTPS outbound access"
   type        = bool
   default     = true
 }
 
 variable "needs_s3_logs" {
-  description = "Whether the service needs S3 log bucket access"
+  description = "Whether the service needs S3 access for logs"
   type        = bool
   default     = true
 }
 
 variable "needs_dataiku" {
-  description = "Whether the service needs Dataiku API access"
+  description = "Whether the service needs Dataiku access"
   type        = bool
   default     = false
 }
 
-# -----------------------------------------------------------------------------
-# Network CIDRs
-# -----------------------------------------------------------------------------
-
+# Network CIDRs for security group rules
 variable "mongo_cidrs" {
   description = "CIDR blocks for MongoDB access"
   type        = list(string)
@@ -154,32 +159,13 @@ variable "redis_cidrs" {
   default     = []
 }
 
-# -----------------------------------------------------------------------------
-# ALB Configuration
-# -----------------------------------------------------------------------------
-
-variable "alb_listener_arn" {
-  description = "ARN of the ALB listener for adding rules"
-  type        = string
-  default     = ""
+variable "dataiku_cidrs" {
+  description = "CIDR blocks for Dataiku access"
+  type        = list(string)
+  default     = []
 }
 
-variable "alb_security_group_id" {
-  description = "Security group ID of the ALB"
-  type        = string
-  default     = ""
-}
-
-variable "listener_rule_priority" {
-  description = "Priority for the ALB listener rule (must be unique per listener)"
-  type        = number
-  default     = 100
-}
-
-# -----------------------------------------------------------------------------
-# Escape Hatches
-# -----------------------------------------------------------------------------
-
+# Escape hatches
 variable "additional_iam_policy_arns" {
   description = "Additional IAM policy ARNs to attach to the instance role"
   type        = list(string)
@@ -198,64 +184,55 @@ variable "environment_variables" {
   default     = {}
 }
 
-# -----------------------------------------------------------------------------
-# Autoscaling Configuration
-# -----------------------------------------------------------------------------
-
+# Autoscaling configuration
 variable "scale_up_cpu_threshold" {
-  description = "CPU utilization threshold for scaling up"
+  description = "CPU percentage threshold to trigger scale up"
   type        = number
   default     = 70
 }
 
 variable "scale_down_cpu_threshold" {
-  description = "CPU utilization threshold for scaling down"
+  description = "CPU percentage threshold to trigger scale down"
   type        = number
   default     = 30
 }
 
 variable "scale_up_evaluation_periods" {
-  description = "Number of periods to evaluate for scale up"
+  description = "Number of periods to evaluate before scaling up"
   type        = number
   default     = 2
 }
 
 variable "scale_down_evaluation_periods" {
-  description = "Number of periods to evaluate for scale down"
+  description = "Number of periods to evaluate before scaling down"
   type        = number
   default     = 5
 }
 
-variable "scale_cooldown" {
-  description = "Cooldown period in seconds between scaling actions"
-  type        = number
-  default     = 300
-}
-
-# -----------------------------------------------------------------------------
-# Optional Configuration
-# -----------------------------------------------------------------------------
-
-variable "tags" {
-  description = "Additional tags to apply to all resources"
-  type        = map(string)
-  default     = {}
-}
-
+# S3 logs bucket (when needs_s3_logs is true)
 variable "s3_logs_bucket" {
   description = "S3 bucket for application logs"
   type        = string
   default     = ""
 }
 
-variable "dataiku_api_endpoint" {
-  description = "Dataiku API endpoint URL"
+# Dataiku configuration
+variable "dataiku_bucket" {
+  description = "S3 bucket for Dataiku data exchange"
   type        = string
   default     = ""
 }
 
+# Additional tags
+variable "tags" {
+  description = "Additional tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}
+
+# Lifecycle hook configuration
 variable "enable_lifecycle_hook" {
-  description = "Enable ASG lifecycle hook for instance initialization"
+  description = "Enable lifecycle hook for instance initialization"
   type        = bool
   default     = false
 }
@@ -264,16 +241,4 @@ variable "lifecycle_hook_timeout" {
   description = "Timeout in seconds for lifecycle hook"
   type        = number
   default     = 300
-}
-
-variable "root_volume_size" {
-  description = "Size of the root EBS volume in GB"
-  type        = number
-  default     = 20
-}
-
-variable "root_volume_type" {
-  description = "Type of the root EBS volume"
-  type        = string
-  default     = "gp3"
 }

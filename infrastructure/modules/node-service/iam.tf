@@ -1,224 +1,212 @@
-# -----------------------------------------------------------------------------
-# IAM Role for EC2 Instances
-# -----------------------------------------------------------------------------
-
-data "aws_iam_policy_document" "assume_role" {
-  statement {
-    effect = "Allow"
-    principals {
-      type        = "Service"
-      identifiers = ["ec2.amazonaws.com"]
-    }
-    actions = ["sts:AssumeRole"]
-  }
-}
-
+# IAM Role for EC2 instances
 resource "aws_iam_role" "service" {
-  name               = "${var.service_name}-${var.environment}-role"
-  assume_role_policy = data.aws_iam_policy_document.assume_role.json
+  name_prefix = "${local.name_prefix}-"
+  path        = "/services/"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
 
   tags = local.common_tags
 }
 
+# IAM Instance Profile
 resource "aws_iam_instance_profile" "service" {
-  name = "${var.service_name}-${var.environment}-profile"
-  role = aws_iam_role.service.name
-
-  tags = local.common_tags
+  name_prefix = "${local.name_prefix}-"
+  path        = "/services/"
+  role        = aws_iam_role.service.name
+  tags        = local.common_tags
 }
 
-# -----------------------------------------------------------------------------
-# Base IAM Policy (always attached)
-# -----------------------------------------------------------------------------
-
-data "aws_iam_policy_document" "base" {
-  # CloudWatch Logs permissions
-  statement {
-    sid    = "CloudWatchLogs"
-    effect = "Allow"
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-      "logs:DescribeLogStreams"
-    ]
-    resources = [
-      "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ec2/${var.service_name}*",
-      "arn:aws:logs:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ec2/${var.service_name}*:*"
-    ]
-  }
-
-  # SSM Parameter Store read access
-  statement {
-    sid    = "SSMParameterStore"
-    effect = "Allow"
-    actions = [
-      "ssm:GetParameter",
-      "ssm:GetParameters",
-      "ssm:GetParametersByPath"
-    ]
-    resources = [
-      "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${var.environment}/${var.service_name}/*"
-    ]
-  }
-
-  # EC2 describe permissions for instance metadata
-  statement {
-    sid    = "EC2Describe"
-    effect = "Allow"
-    actions = [
-      "ec2:DescribeTags",
-      "ec2:DescribeInstances"
-    ]
-    resources = ["*"]
-  }
-
-  # Artifact bucket read access
-  statement {
-    sid    = "ArtifactBucketRead"
-    effect = "Allow"
-    actions = [
-      "s3:GetObject",
-      "s3:GetObjectVersion",
-      "s3:ListBucket"
-    ]
-    resources = [
-      "arn:aws:s3:::${var.artifact_bucket}",
-      "arn:aws:s3:::${var.artifact_bucket}/${var.service_name}/*"
-    ]
-  }
-
-  # CloudWatch metrics permissions
-  statement {
-    sid    = "CloudWatchMetrics"
-    effect = "Allow"
-    actions = [
-      "cloudwatch:PutMetricData"
-    ]
-    resources = ["*"]
-    condition {
-      test     = "StringEquals"
-      variable = "cloudwatch:namespace"
-      values   = ["CWAgent", "NodeServices/${var.service_name}"]
-    }
-  }
-
-  # ASG lifecycle hook completion (if enabled)
-  dynamic "statement" {
-    for_each = var.enable_lifecycle_hook ? [1] : []
-    content {
-      sid    = "ASGLifecycleHook"
-      effect = "Allow"
-      actions = [
-        "autoscaling:CompleteLifecycleAction"
-      ]
-      resources = [
-        "arn:aws:autoscaling:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:autoScalingGroup:*:autoScalingGroupName/${var.service_name}-${var.environment}-asg"
-      ]
-    }
-  }
-}
-
+# Base inline policy - common permissions for all services
 resource "aws_iam_role_policy" "base" {
-  name   = "base-policy"
-  role   = aws_iam_role.service.id
-  policy = data.aws_iam_policy_document.base.json
+  name_prefix = "${local.name_prefix}-base-"
+  role        = aws_iam_role.service.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # CloudWatch Logs permissions
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = [
+          "${aws_cloudwatch_log_group.service.arn}",
+          "${aws_cloudwatch_log_group.service.arn}:*"
+        ]
+      },
+      # EC2 describe permissions (for service discovery)
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:DescribeTags"
+        ]
+        Resource = "*"
+      },
+      # Artifact bucket read access
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.artifact_bucket}",
+          "arn:aws:s3:::${var.artifact_bucket}/*"
+        ]
+      },
+      # Parameter Store read access for service config
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = [
+          "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${var.service_name}/*",
+          "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/shared/*"
+        ]
+      },
+      # KMS decrypt for encrypted parameters
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "kms:ViaService" = "ssm.${data.aws_region.current.id}.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
 }
 
-# -----------------------------------------------------------------------------
-# Conditional IAM Policies
-# -----------------------------------------------------------------------------
-
-# S3 Logs bucket policy
-data "aws_iam_policy_document" "s3_logs" {
-  count = var.needs_s3_logs && var.s3_logs_bucket != "" ? 1 : 0
-
-  statement {
-    sid    = "S3LogsWrite"
-    effect = "Allow"
-    actions = [
-      "s3:PutObject",
-      "s3:PutObjectAcl"
-    ]
-    resources = [
-      "arn:aws:s3:::${var.s3_logs_bucket}/${var.service_name}/*"
-    ]
-  }
-}
-
+# S3 Logs policy (conditional)
 resource "aws_iam_role_policy" "s3_logs" {
   count = var.needs_s3_logs && var.s3_logs_bucket != "" ? 1 : 0
 
-  name   = "s3-logs-policy"
-  role   = aws_iam_role.service.id
-  policy = data.aws_iam_policy_document.s3_logs[0].json
-}
+  name_prefix = "${local.name_prefix}-s3-logs-"
+  role        = aws_iam_role.service.id
 
-# Redis/ElastiCache policy
-data "aws_iam_policy_document" "redis" {
-  count = var.needs_redis ? 1 : 0
-
-  statement {
-    sid    = "ElastiCacheDescribe"
-    effect = "Allow"
-    actions = [
-      "elasticache:DescribeCacheClusters",
-      "elasticache:DescribeReplicationGroups"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.s3_logs_bucket}/${var.service_name}/*"
+        ]
+      }
     ]
-    resources = ["*"]
-  }
+  })
 }
 
+# Redis/ElastiCache policy (conditional)
 resource "aws_iam_role_policy" "redis" {
   count = var.needs_redis ? 1 : 0
 
-  name   = "redis-policy"
-  role   = aws_iam_role.service.id
-  policy = data.aws_iam_policy_document.redis[0].json
+  name_prefix = "${local.name_prefix}-redis-"
+  role        = aws_iam_role.service.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticache:DescribeCacheClusters",
+          "elasticache:DescribeReplicationGroups"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
-# Dataiku API policy
-data "aws_iam_policy_document" "dataiku" {
-  count = var.needs_dataiku ? 1 : 0
-
-  statement {
-    sid    = "DataikuSecrets"
-    effect = "Allow"
-    actions = [
-      "secretsmanager:GetSecretValue"
-    ]
-    resources = [
-      "arn:aws:secretsmanager:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:secret:${var.environment}/dataiku/*"
-    ]
-  }
-}
-
+# Dataiku S3 policy (conditional)
 resource "aws_iam_role_policy" "dataiku" {
-  count = var.needs_dataiku ? 1 : 0
+  count = var.needs_dataiku && var.dataiku_bucket != "" ? 1 : 0
 
-  name   = "dataiku-policy"
-  role   = aws_iam_role.service.id
-  policy = data.aws_iam_policy_document.dataiku[0].json
+  name_prefix = "${local.name_prefix}-dataiku-"
+  role        = aws_iam_role.service.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.dataiku_bucket}",
+          "arn:aws:s3:::${var.dataiku_bucket}/*"
+        ]
+      }
+    ]
+  })
 }
 
-# -----------------------------------------------------------------------------
-# AWS Managed Policy Attachments
-# -----------------------------------------------------------------------------
+# Lifecycle hook policy (conditional)
+resource "aws_iam_role_policy" "lifecycle_hook" {
+  count = var.enable_lifecycle_hook ? 1 : 0
 
-resource "aws_iam_role_policy_attachment" "ssm_managed" {
+  name_prefix = "${local.name_prefix}-lifecycle-"
+  role        = aws_iam_role.service.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:CompleteLifecycleAction",
+          "autoscaling:RecordLifecycleActionHeartbeat"
+        ]
+        Resource = aws_autoscaling_group.service.arn
+      }
+    ]
+  })
+}
+
+# AWS Managed Policy: SSM for Session Manager access
+resource "aws_iam_role_policy_attachment" "ssm" {
   role       = aws_iam_role.service.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+# AWS Managed Policy: CloudWatch Agent
 resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
   role       = aws_iam_role.service.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
-# -----------------------------------------------------------------------------
-# Additional Policy Attachments (escape hatch)
-# -----------------------------------------------------------------------------
-
+# Additional policy attachments (escape hatch)
 resource "aws_iam_role_policy_attachment" "additional" {
   for_each = toset(var.additional_iam_policy_arns)
 

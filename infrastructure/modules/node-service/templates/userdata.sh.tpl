@@ -1,42 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 
-# -----------------------------------------------------------------------------
+# Log all output to a file and console
+exec > >(tee /var/log/userdata.log) 2>&1
+
+echo "=== Starting user data script for ${service_name} ==="
+echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 # Variables from Terraform
-# -----------------------------------------------------------------------------
 SERVICE_NAME="${service_name}"
 ENVIRONMENT="${environment}"
 AWS_REGION="${aws_region}"
-APP_PORT="${app_port}"
 ARTIFACT_BUCKET="${artifact_bucket}"
-ASG_NAME="${asg_name}"
+APP_PORT="${app_port}"
+LOG_GROUP_NAME="${log_group_name}"
 ENABLE_LIFECYCLE_HOOK="${enable_lifecycle_hook}"
 
-# -----------------------------------------------------------------------------
-# Logging Setup
-# -----------------------------------------------------------------------------
-exec > >(tee /var/log/userdata.log | logger -t user-data -s 2>/dev/console) 2>&1
-echo "Starting userdata script for $SERVICE_NAME in $ENVIRONMENT"
+# Get instance metadata (IMDSv2)
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+echo "Instance ID: $INSTANCE_ID"
 
-# -----------------------------------------------------------------------------
-# Install Dependencies
-# -----------------------------------------------------------------------------
-echo "Installing dependencies..."
+# Install dependencies
+echo "=== Installing dependencies ==="
 yum update -y
 yum install -y amazon-cloudwatch-agent jq awscli
 
-# Install Node.js if not present
-if ! command -v node &> /dev/null; then
-    echo "Installing Node.js..."
-    curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
-    yum install -y nodejs
-fi
-
-# -----------------------------------------------------------------------------
 # Configure CloudWatch Agent
-# -----------------------------------------------------------------------------
-echo "Configuring CloudWatch agent..."
-cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCONFIG'
+echo "=== Configuring CloudWatch Agent ==="
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<CWAGENT
 {
   "agent": {
     "metrics_collection_interval": 60,
@@ -47,20 +39,20 @@ cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCON
       "files": {
         "collect_list": [
           {
-            "file_path": "/var/log/${service_name}/app.log",
-            "log_group_name": "/aws/ec2/${service_name}",
+            "file_path": "/var/log/$SERVICE_NAME/app.log",
+            "log_group_name": "$LOG_GROUP_NAME",
             "log_stream_name": "{instance_id}/app",
             "timestamp_format": "%Y-%m-%dT%H:%M:%S.%fZ"
           },
           {
-            "file_path": "/var/log/${service_name}/error.log",
-            "log_group_name": "/aws/ec2/${service_name}",
+            "file_path": "/var/log/$SERVICE_NAME/error.log",
+            "log_group_name": "$LOG_GROUP_NAME",
             "log_stream_name": "{instance_id}/error",
             "timestamp_format": "%Y-%m-%dT%H:%M:%S.%fZ"
           },
           {
             "file_path": "/var/log/userdata.log",
-            "log_group_name": "/aws/ec2/${service_name}",
+            "log_group_name": "$LOG_GROUP_NAME",
             "log_stream_name": "{instance_id}/userdata"
           }
         ]
@@ -68,105 +60,93 @@ cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCON
     }
   },
   "metrics": {
-    "namespace": "NodeServices/${service_name}",
+    "namespace": "NodeServices/$SERVICE_NAME",
     "metrics_collected": {
+      "cpu": {
+        "measurement": ["cpu_usage_active", "cpu_usage_idle"],
+        "metrics_collection_interval": 60
+      },
       "mem": {
-        "measurement": ["mem_used_percent"]
+        "measurement": ["mem_used_percent"],
+        "metrics_collection_interval": 60
       },
       "disk": {
         "measurement": ["disk_used_percent"],
+        "metrics_collection_interval": 60,
         "resources": ["/"]
       }
     },
     "append_dimensions": {
-      "InstanceId": "$${aws:InstanceId}",
-      "AutoScalingGroupName": "$${aws:AutoScalingGroupName}"
+      "InstanceId": "\$${aws:InstanceId}",
+      "AutoScalingGroupName": "\$${aws:AutoScalingGroupName}"
     }
   }
 }
-CWCONFIG
+CWAGENT
 
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-    -a fetch-config \
-    -m ec2 \
-    -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
-    -s
+  -a fetch-config \
+  -m ec2 \
+  -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
-# -----------------------------------------------------------------------------
-# Create Application User and Directories
-# -----------------------------------------------------------------------------
-echo "Creating application user and directories..."
-if ! id -u nodeapp &>/dev/null; then
-    useradd -r -s /sbin/nologin nodeapp
-fi
+# Create nodeapp user
+echo "=== Creating nodeapp user ==="
+useradd -r -s /sbin/nologin nodeapp || true
+mkdir -p /opt/nodeapp /var/log/$SERVICE_NAME
+chown -R nodeapp:nodeapp /opt/nodeapp /var/log/$SERVICE_NAME
 
-mkdir -p /opt/$SERVICE_NAME
-mkdir -p /var/log/$SERVICE_NAME
-chown -R nodeapp:nodeapp /opt/$SERVICE_NAME
-chown -R nodeapp:nodeapp /var/log/$SERVICE_NAME
+# Fetch artifacts from S3
+echo "=== Fetching artifacts from S3 ==="
+aws s3 cp "s3://$ARTIFACT_BUCKET/$SERVICE_NAME/latest/app.tar.gz" /tmp/app.tar.gz --region $AWS_REGION
+tar -xzf /tmp/app.tar.gz -C /opt/nodeapp
+chown -R nodeapp:nodeapp /opt/nodeapp
 
-# -----------------------------------------------------------------------------
-# Fetch Artifacts from S3
-# -----------------------------------------------------------------------------
-echo "Fetching artifacts from S3..."
-ARTIFACT_PATH="s3://$ARTIFACT_BUCKET/$SERVICE_NAME/latest.tar.gz"
-aws s3 cp "$ARTIFACT_PATH" /tmp/app.tar.gz --region "$AWS_REGION"
-tar -xzf /tmp/app.tar.gz -C /opt/$SERVICE_NAME
-chown -R nodeapp:nodeapp /opt/$SERVICE_NAME
-rm -f /tmp/app.tar.gz
-
-# -----------------------------------------------------------------------------
-# Fetch Configuration from Parameter Store
-# -----------------------------------------------------------------------------
-echo "Fetching configuration from Parameter Store..."
-CONFIG_PREFIX="/$ENVIRONMENT/$SERVICE_NAME"
-
-# Create environment file from Parameter Store
+# Fetch config from Parameter Store
+echo "=== Fetching config from Parameter Store ==="
 aws ssm get-parameters-by-path \
-    --path "$CONFIG_PREFIX" \
-    --with-decryption \
-    --region "$AWS_REGION" \
-    --query "Parameters[*].[Name,Value]" \
-    --output text | while read -r name value; do
-        key=$(basename "$name")
-        echo "$key=$value"
-    done > /opt/$SERVICE_NAME/.env
+  --path "/$SERVICE_NAME/$ENVIRONMENT" \
+  --with-decryption \
+  --region $AWS_REGION \
+  --query "Parameters[*].[Name,Value]" \
+  --output text | while read name value; do
+    param_name=$(basename "$name")
+    echo "export $param_name=\"$value\"" >> /opt/nodeapp/.env
+done
 
-# -----------------------------------------------------------------------------
-# Add Terraform-provided Environment Variables
-# -----------------------------------------------------------------------------
-echo "Adding environment variables from Terraform..."
-%{ for key, value in environment_variables ~}
-echo "${key}=${value}" >> /opt/$SERVICE_NAME/.env
-%{ endfor ~}
+# Add Terraform-provided environment variables
+echo "=== Setting environment variables ==="
+cat >> /opt/nodeapp/.env <<'ENVVARS'
+${env_vars}
+ENVVARS
 
 # Add standard environment variables
-cat >> /opt/$SERVICE_NAME/.env <<EOF
-SERVICE_NAME=$SERVICE_NAME
-ENVIRONMENT=$ENVIRONMENT
-PORT=$APP_PORT
-EOF
+cat >> /opt/nodeapp/.env <<STDENV
+export NODE_ENV=$ENVIRONMENT
+export PORT=$APP_PORT
+export SERVICE_NAME=$SERVICE_NAME
+export AWS_REGION=$AWS_REGION
+export INSTANCE_ID=$INSTANCE_ID
+STDENV
 
-chown nodeapp:nodeapp /opt/$SERVICE_NAME/.env
-chmod 600 /opt/$SERVICE_NAME/.env
+chown nodeapp:nodeapp /opt/nodeapp/.env
+chmod 600 /opt/nodeapp/.env
 
-# -----------------------------------------------------------------------------
-# Create systemd Service
-# -----------------------------------------------------------------------------
-echo "Creating systemd service..."
-cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
+# Create systemd service
+echo "=== Creating systemd service ==="
+cat > /etc/systemd/system/$SERVICE_NAME.service <<SERVICE
 [Unit]
-Description=$SERVICE_NAME Node.js Application
+Description=$SERVICE_NAME Node.js Service
 After=network.target
 
 [Service]
 Type=simple
 User=nodeapp
 Group=nodeapp
-WorkingDirectory=/opt/$SERVICE_NAME
-EnvironmentFile=/opt/$SERVICE_NAME/.env
-ExecStart=/usr/bin/node /opt/$SERVICE_NAME/dist/index.js
-Restart=on-failure
+WorkingDirectory=/opt/nodeapp
+EnvironmentFile=/opt/nodeapp/.env
+ExecStart=/usr/bin/node /opt/nodeapp/dist/index.js
+Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/$SERVICE_NAME/app.log
 StandardError=append:/var/log/$SERVICE_NAME/error.log
@@ -179,49 +159,54 @@ ReadWritePaths=/var/log/$SERVICE_NAME
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SERVICE
 
-# -----------------------------------------------------------------------------
-# Start the Application
-# -----------------------------------------------------------------------------
-echo "Starting the application..."
+# Enable and start the service
+echo "=== Starting service ==="
 systemctl daemon-reload
 systemctl enable $SERVICE_NAME
 systemctl start $SERVICE_NAME
 
-# Wait for application to be healthy
-echo "Waiting for application to be healthy..."
-MAX_RETRIES=30
-RETRY_COUNT=0
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if curl -s -o /dev/null -w "%%{http_code}" "http://localhost:$APP_PORT/health" | grep -q "200"; then
-        echo "Application is healthy!"
-        break
-    fi
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    echo "Waiting for application to start... ($RETRY_COUNT/$MAX_RETRIES)"
-    sleep 10
+# Wait for service to be healthy
+echo "=== Waiting for service health check ==="
+max_attempts=30
+attempt=0
+while [ $attempt -lt $max_attempts ]; do
+  if curl -sf http://localhost:$APP_PORT/health > /dev/null 2>&1; then
+    echo "Service is healthy!"
+    break
+  fi
+  echo "Waiting for service to be healthy... (attempt $((attempt + 1))/$max_attempts)"
+  sleep 10
+  attempt=$((attempt + 1))
 done
 
-if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-    echo "ERROR: Application failed to become healthy"
-    journalctl -u $SERVICE_NAME --no-pager -n 50
-    exit 1
+if [ $attempt -eq $max_attempts ]; then
+  echo "ERROR: Service did not become healthy within timeout"
+  systemctl status $SERVICE_NAME || true
+  journalctl -u $SERVICE_NAME --no-pager -n 50 || true
+  exit 1
 fi
 
-# -----------------------------------------------------------------------------
-# Complete Lifecycle Hook (if enabled)
-# -----------------------------------------------------------------------------
-%{ if enable_lifecycle_hook ~}
-echo "Completing lifecycle hook..."
-INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+# Complete lifecycle hook if enabled
+if [ "$ENABLE_LIFECYCLE_HOOK" = "true" ]; then
+  echo "=== Completing lifecycle hook ==="
+  # Get ASG name from instance tags
+  ASG_NAME=$(aws ec2 describe-tags \
+    --filters "Name=resource-id,Values=$INSTANCE_ID" "Name=key,Values=aws:autoscaling:groupName" \
+    --region $AWS_REGION \
+    --query "Tags[0].Value" \
+    --output text)
 
-aws autoscaling complete-lifecycle-action \
-    --lifecycle-action-result CONTINUE \
-    --instance-id "$INSTANCE_ID" \
-    --lifecycle-hook-name "$SERVICE_NAME-$ENVIRONMENT-launch-hook" \
-    --auto-scaling-group-name "$ASG_NAME" \
-    --region "$AWS_REGION" || true
-%{ endif ~}
+  if [ -n "$ASG_NAME" ] && [ "$ASG_NAME" != "None" ]; then
+    aws autoscaling complete-lifecycle-action \
+      --lifecycle-hook-name "$SERVICE_NAME-$ENVIRONMENT-launch-hook" \
+      --auto-scaling-group-name "$ASG_NAME" \
+      --lifecycle-action-result CONTINUE \
+      --instance-id "$INSTANCE_ID" \
+      --region $AWS_REGION || echo "Failed to complete lifecycle hook (may already be completed)"
+  fi
+fi
 
-echo "Userdata script completed successfully!"
+echo "=== User data script completed successfully ==="
+echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
