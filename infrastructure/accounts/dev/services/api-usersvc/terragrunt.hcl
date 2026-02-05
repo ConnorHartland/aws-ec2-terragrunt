@@ -30,6 +30,15 @@ inputs = {
   health_check_path = "/api/health"
   path_patterns     = ["/api/users/*", "/api/auth/*"]
 
+  # SSL certs and keytabs to pull at boot
+  s3_ssl_paths = [
+    "certs/wildcard.example.com.crt",
+    "private/wildcard.example.com.key",
+    "kafka/kafka-client.crt",
+    "kafka/kafka-client.key",
+    "kafka/kafka-ca.crt",
+  ]
+
   # Environment variables for the application
   environment_variables = {
     NODE_ENV              = "development"

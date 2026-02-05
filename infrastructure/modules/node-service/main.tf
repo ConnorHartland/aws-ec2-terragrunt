@@ -23,7 +23,11 @@ resource "aws_launch_template" "service" {
     environment           = var.environment
     aws_region            = data.aws_region.current.id
     artifact_bucket       = var.artifact_bucket
+    ssl_bucket            = var.ssl_bucket
+    s3_ssl_paths          = var.s3_ssl_paths
+    wazuh_manager_ip      = var.wazuh_manager_ip
     app_port              = var.app_port
+    health_check_path     = var.health_check_path
     env_vars              = local.env_vars_string
     enable_lifecycle_hook = var.enable_lifecycle_hook
   }))

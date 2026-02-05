@@ -6,6 +6,10 @@ locals {
   aws_region      = "us-east-1"
   ami_id          = "ami-0abcdef1234567890"
   artifact_bucket = "dev-deployment-artifacts"
+  ssl_bucket      = "dev-ssl-certs"
+
+  # Security agent configuration
+  wazuh_manager_ip = "10.0.100.10"
 
   # Network CIDRs for security group rules
   mongo_cidrs = ["10.0.10.0/24", "10.0.11.0/24"]

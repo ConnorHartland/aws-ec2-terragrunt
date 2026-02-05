@@ -35,12 +35,13 @@ resource "aws_iam_role_policy" "base" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # EC2 describe permissions (for service discovery)
+      # EC2 describe and self-tagging permissions
       {
         Effect = "Allow"
         Action = [
           "ec2:DescribeInstances",
-          "ec2:DescribeTags"
+          "ec2:DescribeTags",
+          "ec2:CreateTags"
         ]
         Resource = "*"
       },
@@ -55,6 +56,19 @@ resource "aws_iam_role_policy" "base" {
         Resource = [
           "arn:aws:s3:::${var.artifact_bucket}",
           "arn:aws:s3:::${var.artifact_bucket}/*"
+        ]
+      },
+      # SSL bucket read access (certs, keytabs)
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.ssl_bucket}",
+          "arn:aws:s3:::${var.ssl_bucket}/*"
         ]
       },
       # Parameter Store read access for service config

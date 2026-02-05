@@ -73,6 +73,22 @@ variable "artifact_bucket" {
   type        = string
 }
 
+variable "ssl_bucket" {
+  description = "S3 bucket containing SSL certs, Kafka certs, and keytabs"
+  type        = string
+}
+
+variable "s3_ssl_paths" {
+  description = "List of S3 paths (relative to ssl_bucket) for certs/keytabs to pull at boot"
+  type        = list(string)
+  default     = []
+}
+
+variable "wazuh_manager_ip" {
+  description = "IP address of the Wazuh manager for agent registration"
+  type        = string
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN for HTTPS listener (optional)"
   type        = string

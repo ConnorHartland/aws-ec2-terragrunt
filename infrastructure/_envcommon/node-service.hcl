@@ -33,9 +33,11 @@ inputs = {
   public_subnet_ids  = dependency.vpc.outputs.public_subnet_ids
 
   # From env.hcl
-  environment     = local.env_vars.locals.environment
-  ami_id          = local.env_vars.locals.ami_id
-  artifact_bucket = local.env_vars.locals.artifact_bucket
+  environment      = local.env_vars.locals.environment
+  ami_id           = local.env_vars.locals.ami_id
+  artifact_bucket  = local.env_vars.locals.artifact_bucket
+  ssl_bucket       = local.env_vars.locals.ssl_bucket
+  wazuh_manager_ip = local.env_vars.locals.wazuh_manager_ip
 
   # Network CIDRs from env.hcl
   mongo_cidrs = try(local.env_vars.locals.mongo_cidrs, [])
@@ -68,5 +70,6 @@ inputs = {
   additional_iam_policy_arns    = []
   additional_security_group_ids = []
   environment_variables         = {}
+  s3_ssl_paths                  = []
   tags                          = {}
 }
