@@ -53,6 +53,12 @@ variable "falcon_cid" {
   sensitive   = true
 }
 
+variable "nessus_s3_bucket" {
+  type        = string
+  description = "S3 bucket containing Nessus agent RPM"
+  default     = ""
+}
+
 variable "ami_name_prefix" {
   type    = string
   default = "node-service"
@@ -183,6 +189,13 @@ build {
   }
 
   provisioner "shell" {
+    script = "scripts/05b-install-nessus.sh"
+    environment_vars = [
+      "NESSUS_S3_BUCKET=${var.nessus_s3_bucket}"
+    ]
+  }
+
+  provisioner "shell" {
     script = "scripts/06-configure-nftables.sh"
   }
 
@@ -196,6 +209,14 @@ build {
 
   provisioner "shell" {
     script = "scripts/09-setup-app-directories.sh"
+  }
+
+  provisioner "shell" {
+    script = "scripts/10-setup-maintenance-timers.sh"
+  }
+
+  provisioner "shell" {
+    script = "scripts/11-setup-ad-leave-service.sh"
   }
 
   provisioner "shell" {
