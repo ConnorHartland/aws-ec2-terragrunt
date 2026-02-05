@@ -13,6 +13,7 @@ base_ami_owner = "amazon"
 wazuh_manager_ip     = "10.0.100.10"
 newrelic_license_key = "YOUR_NEWRELIC_LICENSE_KEY"
 falcon_cid           = "YOUR_CROWDSTRIKE_CID"
+agents_s3_bucket     = "your-security-agents-bucket"
 
 # Optional: VPC configuration for builder instance
 # vpc_id    = "vpc-xxxxxxxx"

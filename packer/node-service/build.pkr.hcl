@@ -156,7 +156,7 @@ build {
   provisioner "shell" {
     script          = "scripts/02-install-node.sh"
     remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
     environment_vars = [
       "NODE_VERSION=${var.node_version}"
     ]
@@ -165,7 +165,7 @@ build {
   provisioner "shell" {
     script          = "scripts/03-install-wazuh.sh"
     remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
     environment_vars = [
       "WAZUH_MANAGER_IP=${var.wazuh_manager_ip}",
       "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
@@ -175,7 +175,7 @@ build {
   provisioner "shell" {
     script          = "scripts/04-install-newrelic.sh"
     remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
     environment_vars = [
       "NEWRELIC_LICENSE_KEY=${var.newrelic_license_key}"
     ]
@@ -184,7 +184,7 @@ build {
   provisioner "shell" {
     script          = "scripts/05-install-falcon.sh"
     remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
     environment_vars = [
       "FALCON_CID=${var.falcon_cid}",
       "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
@@ -194,7 +194,7 @@ build {
   provisioner "shell" {
     script          = "scripts/05b-install-nessus.sh"
     remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
     environment_vars = [
       "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
     ]
