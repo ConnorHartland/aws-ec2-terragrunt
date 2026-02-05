@@ -83,8 +83,6 @@ inputs = {
   additional_security_group_ids = []
   environment_variables         = {}
   s3_ssl_paths                  = []
-  ssm_parameters                = {}
-  app_version                   = "latest"
   nftables_s3_path              = ""
   tags                          = {}
 }

@@ -82,19 +82,11 @@ unset ADUSER ADPASS
 %{ endif ~}
 
 # =============================================================================
-# GET APP VERSION AND PULL CODE FROM S3
+# DOWNLOAD APPLICATION CODE FROM S3
 # =============================================================================
-echo "=== Getting app version from SSM ==="
-APP_VERSION=$(aws ssm get-parameter \
-  --name "/$SERVICE_NAME/$ENVIRONMENT/app-version" \
-  --query "Parameter.Value" \
-  --output text \
-  --region "$AWS_REGION" 2>/dev/null || echo "latest")
-echo "App version: $APP_VERSION"
-
-echo "=== Pulling app code from S3 ==="
+echo "=== Downloading application code from S3 ==="
 mkdir -p /opt/webapp
-aws s3 cp "s3://$ARTIFACT_BUCKET/$SERVICE_NAME/$APP_VERSION/build.zip" /tmp/build.zip --region "$AWS_REGION"
+aws s3 cp "s3://$ARTIFACT_BUCKET/$SERVICE_NAME/$ENVIRONMENT/build.zip" /tmp/build.zip --region "$AWS_REGION"
 unzip -o /tmp/build.zip -d /opt/webapp
 rm -f /tmp/build.zip
 chown -R nodeapp:nodeapp /opt/webapp
@@ -113,25 +105,14 @@ chown -R nodeapp:nodeapp /var/local/ssl
 chmod 600 /var/local/ssl/kafka/* 2>/dev/null || true
 
 # =============================================================================
-# GENERATE ENV CONFIG
+# DOWNLOAD ENVIRONMENT FILE FROM S3
 # =============================================================================
-echo "=== Generating environment config ==="
+echo "=== Downloading environment file from S3 ==="
+aws s3 cp "s3://$ARTIFACT_BUCKET/$SERVICE_NAME/$ENVIRONMENT/.env" /opt/webapp/.env --region "$AWS_REGION"
 
-aws ssm get-parameters-by-path \
-  --path "/$SERVICE_NAME/$ENVIRONMENT" \
-  --with-decryption \
-  --region "$AWS_REGION" \
-  --query "Parameters[*].[Name,Value]" \
-  --output text | while IFS=$'\t' read -r name value; do
-    param_name=$(basename "$name")
-    [ "$param_name" != "app-version" ] && echo "export $param_name=\"$value\"" >> /opt/webapp/.env
-done
-
-cat >> /opt/webapp/.env << ENVVARS
-${env_vars}
-ENVVARS
-
+# Append standard environment variables
 cat >> /opt/webapp/.env << STDENV
+${env_vars}
 export NODE_ENV=$ENVIRONMENT
 export PORT=$APP_PORT
 export SERVICE_NAME=$SERVICE_NAME

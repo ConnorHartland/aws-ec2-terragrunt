@@ -36,20 +36,9 @@ inputs = {
     "ssl/kafka/api-usersvc/client.key",
   ]
 
-  # SSM parameters (created by Terraform)
-  ssm_parameters = {
-    MONGO_URI = {
-      value       = "mongodb://mongo.dev.internal:27017/usersvc"
-      description = "MongoDB connection string"
-      secure      = true
-    }
-    KAFKA_BROKERS = {
-      value       = "kafkabrokerdev1.kafka:9092,kafkabrokerdev2.kafka:9092,kafkabrokerdev3.kafka:9092"
-      description = "Kafka broker list"
-    }
-  }
-
   # Environment variables (baked into launch template)
+  # Note: Application secrets (MONGO_URI, KAFKA_BROKERS, etc.) are now managed
+  # in S3 at s3://{artifact_bucket}/{service_name}/{environment}/.env
   environment_variables = {
     NODE_ENV              = "development"
     MONGO_CONNECTION_POOL = "10"
