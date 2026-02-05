@@ -21,9 +21,8 @@ inputs = {
   max_size         = 10
   desired_capacity = 3
 
-  # Feature flags - this service needs MongoDB and Redis
+  # Feature flags - this service needs MongoDB and Kafka
   needs_mongo = true
-  needs_redis = true
   needs_kafka = true
 
   # Application configuration
@@ -33,10 +32,9 @@ inputs = {
 
   # Environment variables for the application
   environment_variables = {
-    NODE_ENV                 = "development"
-    LOG_LEVEL                = "debug"
-    MONGO_CONNECTION_POOL    = "10"
-    REDIS_CONNECTION_TIMEOUT = "5000"
+    NODE_ENV              = "development"
+    LOG_LEVEL             = "debug"
+    MONGO_CONNECTION_POOL = "10"
   }
 
   # Additional tags for this service

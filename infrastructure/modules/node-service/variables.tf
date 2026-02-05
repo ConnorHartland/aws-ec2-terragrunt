@@ -104,12 +104,6 @@ variable "needs_sql" {
   default     = false
 }
 
-variable "needs_redis" {
-  description = "Whether the service needs Redis access"
-  type        = bool
-  default     = false
-}
-
 variable "needs_kafka" {
   description = "Whether the service needs Kafka access"
   type        = bool
@@ -128,12 +122,6 @@ variable "needs_s3_logs" {
   default     = true
 }
 
-variable "needs_dataiku" {
-  description = "Whether the service needs Dataiku access"
-  type        = bool
-  default     = false
-}
-
 # Network CIDRs for security group rules
 variable "mongo_cidrs" {
   description = "CIDR blocks for MongoDB access"
@@ -149,18 +137,6 @@ variable "sql_cidrs" {
 
 variable "kafka_cidrs" {
   description = "CIDR blocks for Kafka access"
-  type        = list(string)
-  default     = []
-}
-
-variable "redis_cidrs" {
-  description = "CIDR blocks for Redis access"
-  type        = list(string)
-  default     = []
-}
-
-variable "dataiku_cidrs" {
-  description = "CIDR blocks for Dataiku access"
   type        = list(string)
   default     = []
 }
@@ -212,13 +188,6 @@ variable "scale_down_evaluation_periods" {
 # S3 logs bucket (when needs_s3_logs is true)
 variable "s3_logs_bucket" {
   description = "S3 bucket for application logs"
-  type        = string
-  default     = ""
-}
-
-# Dataiku configuration
-variable "dataiku_bucket" {
-  description = "S3 bucket for Dataiku data exchange"
   type        = string
   default     = ""
 }

@@ -41,7 +41,6 @@ inputs = {
   mongo_cidrs = try(local.env_vars.locals.mongo_cidrs, [])
   sql_cidrs   = try(local.env_vars.locals.sql_cidrs, [])
   kafka_cidrs = try(local.env_vars.locals.kafka_cidrs, [])
-  redis_cidrs = try(local.env_vars.locals.redis_cidrs, [])
 
   # Default instance configuration from env.hcl
   instance_type    = try(local.env_vars.locals.default_instance_type, "t3.medium")
@@ -57,11 +56,9 @@ inputs = {
   needs_alb          = true
   needs_mongo        = false
   needs_sql          = false
-  needs_redis        = false
   needs_kafka        = true
   needs_https_egress = true
   needs_s3_logs      = true
-  needs_dataiku      = false
 
   # Application defaults
   app_port          = 3000

@@ -93,28 +93,6 @@ locals {
         cidr_blocks = var.sql_cidrs
         description = "MySQL access"
       }
-    } : {},
-
-    # Redis egress
-    var.needs_redis && length(var.redis_cidrs) > 0 ? {
-      redis = {
-        from_port   = 6379
-        to_port     = 6379
-        protocol    = "tcp"
-        cidr_blocks = var.redis_cidrs
-        description = "Redis access"
-      }
-    } : {},
-
-    # Dataiku egress
-    var.needs_dataiku && length(var.dataiku_cidrs) > 0 ? {
-      dataiku = {
-        from_port   = 443
-        to_port     = 443
-        protocol    = "tcp"
-        cidr_blocks = var.dataiku_cidrs
-        description = "Dataiku API access"
-      }
     } : {}
   )
 }

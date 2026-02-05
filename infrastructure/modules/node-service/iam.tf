@@ -124,54 +124,6 @@ resource "aws_iam_role_policy" "s3_logs" {
   })
 }
 
-# Redis/ElastiCache policy (conditional)
-resource "aws_iam_role_policy" "redis" {
-  count = var.needs_redis ? 1 : 0
-
-  name_prefix = "${local.name_prefix}-redis-"
-  role        = aws_iam_role.service.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "elasticache:DescribeCacheClusters",
-          "elasticache:DescribeReplicationGroups"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-# Dataiku S3 policy (conditional)
-resource "aws_iam_role_policy" "dataiku" {
-  count = var.needs_dataiku && var.dataiku_bucket != "" ? 1 : 0
-
-  name_prefix = "${local.name_prefix}-dataiku-"
-  role        = aws_iam_role.service.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          "arn:aws:s3:::${var.dataiku_bucket}",
-          "arn:aws:s3:::${var.dataiku_bucket}/*"
-        ]
-      }
-    ]
-  })
-}
-
 # Lifecycle hook policy (conditional)
 resource "aws_iam_role_policy" "lifecycle_hook" {
   count = var.enable_lifecycle_hook ? 1 : 0
