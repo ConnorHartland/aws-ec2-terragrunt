@@ -83,3 +83,13 @@ output "launch_template_latest_version" {
   value       = aws_launch_template.service.latest_version
 }
 
+# SSM Parameter Outputs
+output "ssm_app_version_name" {
+  description = "Name of the SSM parameter for app version"
+  value       = aws_ssm_parameter.app_version.name
+}
+
+output "ssm_parameter_prefix" {
+  description = "SSM parameter path prefix for this service"
+  value       = "/${var.service_name}/${var.environment}"
+}

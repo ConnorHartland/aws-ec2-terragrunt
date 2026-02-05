@@ -39,10 +39,25 @@ inputs = {
     "kafka/kafka-ca.crt",
   ]
 
-  # Environment variables for the application
+  # SSM parameters for the service (created by Terraform)
+  ssm_parameters = {
+    MONGO_URI = {
+      value       = "mongodb://mongo.dev.internal:27017/usersvc"
+      description = "MongoDB connection string"
+      secure      = true
+    }
+    KAFKA_BROKERS = {
+      value       = "kafka-1.dev.internal:9092,kafka-2.dev.internal:9092"
+      description = "Kafka broker list"
+    }
+    LOG_LEVEL = {
+      value = "debug"
+    }
+  }
+
+  # Environment variables passed directly (non-sensitive, baked into launch template)
   environment_variables = {
     NODE_ENV              = "development"
-    LOG_LEVEL             = "debug"
     MONGO_CONNECTION_POOL = "10"
   }
 
