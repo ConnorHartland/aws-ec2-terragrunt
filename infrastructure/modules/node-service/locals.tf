@@ -13,7 +13,4 @@ locals {
   env_vars_string = join("\n", [
     for k, v in var.environment_variables : "export ${k}=\"${v}\""
   ])
-
-  # CloudWatch log group name
-  log_group_name = "/aws/ec2/${var.service_name}/${var.environment}"
 }

@@ -83,13 +83,3 @@ output "launch_template_latest_version" {
   value       = aws_launch_template.service.latest_version
 }
 
-# CloudWatch Outputs
-output "log_group_name" {
-  description = "Name of the CloudWatch log group"
-  value       = aws_cloudwatch_log_group.service.name
-}
-
-output "log_group_arn" {
-  description = "ARN of the CloudWatch log group"
-  value       = aws_cloudwatch_log_group.service.arn
-}

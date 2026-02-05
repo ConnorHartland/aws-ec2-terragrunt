@@ -3,13 +3,6 @@ data "aws_region" "current" {}
 
 data "aws_caller_identity" "current" {}
 
-# CloudWatch Log Group for the service
-resource "aws_cloudwatch_log_group" "service" {
-  name              = local.log_group_name
-  retention_in_days = 30
-  tags              = local.common_tags
-}
-
 # Launch Template
 resource "aws_launch_template" "service" {
   name_prefix   = "${local.name_prefix}-"
@@ -31,7 +24,6 @@ resource "aws_launch_template" "service" {
     aws_region            = data.aws_region.current.id
     artifact_bucket       = var.artifact_bucket
     app_port              = var.app_port
-    log_group_name        = local.log_group_name
     env_vars              = local.env_vars_string
     enable_lifecycle_hook = var.enable_lifecycle_hook
   }))

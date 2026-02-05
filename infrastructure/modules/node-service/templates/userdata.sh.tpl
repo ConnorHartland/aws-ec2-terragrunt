@@ -13,7 +13,6 @@ ENVIRONMENT="${environment}"
 AWS_REGION="${aws_region}"
 ARTIFACT_BUCKET="${artifact_bucket}"
 APP_PORT="${app_port}"
-LOG_GROUP_NAME="${log_group_name}"
 ENABLE_LIFECYCLE_HOOK="${enable_lifecycle_hook}"
 
 # Get instance metadata (IMDSv2)
@@ -24,71 +23,7 @@ echo "Instance ID: $INSTANCE_ID"
 # Install dependencies
 echo "=== Installing dependencies ==="
 yum update -y
-yum install -y amazon-cloudwatch-agent jq awscli
-
-# Configure CloudWatch Agent
-echo "=== Configuring CloudWatch Agent ==="
-cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<CWAGENT
-{
-  "agent": {
-    "metrics_collection_interval": 60,
-    "run_as_user": "root"
-  },
-  "logs": {
-    "logs_collected": {
-      "files": {
-        "collect_list": [
-          {
-            "file_path": "/var/log/$SERVICE_NAME/app.log",
-            "log_group_name": "$LOG_GROUP_NAME",
-            "log_stream_name": "{instance_id}/app",
-            "timestamp_format": "%Y-%m-%dT%H:%M:%S.%fZ"
-          },
-          {
-            "file_path": "/var/log/$SERVICE_NAME/error.log",
-            "log_group_name": "$LOG_GROUP_NAME",
-            "log_stream_name": "{instance_id}/error",
-            "timestamp_format": "%Y-%m-%dT%H:%M:%S.%fZ"
-          },
-          {
-            "file_path": "/var/log/userdata.log",
-            "log_group_name": "$LOG_GROUP_NAME",
-            "log_stream_name": "{instance_id}/userdata"
-          }
-        ]
-      }
-    }
-  },
-  "metrics": {
-    "namespace": "NodeServices/$SERVICE_NAME",
-    "metrics_collected": {
-      "cpu": {
-        "measurement": ["cpu_usage_active", "cpu_usage_idle"],
-        "metrics_collection_interval": 60
-      },
-      "mem": {
-        "measurement": ["mem_used_percent"],
-        "metrics_collection_interval": 60
-      },
-      "disk": {
-        "measurement": ["disk_used_percent"],
-        "metrics_collection_interval": 60,
-        "resources": ["/"]
-      }
-    },
-    "append_dimensions": {
-      "InstanceId": "\$${aws:InstanceId}",
-      "AutoScalingGroupName": "\$${aws:AutoScalingGroupName}"
-    }
-  }
-}
-CWAGENT
-
-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-  -a fetch-config \
-  -m ec2 \
-  -s \
-  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+yum install -y jq awscli
 
 # Create nodeapp user
 echo "=== Creating nodeapp user ==="

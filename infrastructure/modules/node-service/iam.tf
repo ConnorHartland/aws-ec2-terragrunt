@@ -35,19 +35,6 @@ resource "aws_iam_role_policy" "base" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # CloudWatch Logs permissions
-      {
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogStreams"
-        ]
-        Resource = [
-          "${aws_cloudwatch_log_group.service.arn}",
-          "${aws_cloudwatch_log_group.service.arn}:*"
-        ]
-      },
       # EC2 describe permissions (for service discovery)
       {
         Effect = "Allow"
@@ -150,12 +137,6 @@ resource "aws_iam_role_policy" "lifecycle_hook" {
 resource "aws_iam_role_policy_attachment" "ssm" {
   role       = aws_iam_role.service.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-# AWS Managed Policy: CloudWatch Agent
-resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
-  role       = aws_iam_role.service.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 # Additional policy attachments (escape hatch)
