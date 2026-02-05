@@ -146,26 +146,22 @@ build {
 
   # Run provisioning scripts in order
   # remote_folder: /var/tmp avoids noexec on /tmp (CIS hardened images)
-  # execute_command: run through bash to avoid local permission issues
   provisioner "shell" {
-    script          = "scripts/01-base-packages.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/01-base-packages.sh"
+    remote_folder = "/var/tmp"
   }
 
   provisioner "shell" {
-    script          = "scripts/02-install-node.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
+    script        = "scripts/02-install-node.sh"
+    remote_folder = "/var/tmp"
     environment_vars = [
       "NODE_VERSION=${var.node_version}"
     ]
   }
 
   provisioner "shell" {
-    script          = "scripts/03-install-wazuh.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
+    script        = "scripts/03-install-wazuh.sh"
+    remote_folder = "/var/tmp"
     environment_vars = [
       "WAZUH_MANAGER_IP=${var.wazuh_manager_ip}",
       "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
@@ -173,18 +169,16 @@ build {
   }
 
   provisioner "shell" {
-    script          = "scripts/04-install-newrelic.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
+    script        = "scripts/04-install-newrelic.sh"
+    remote_folder = "/var/tmp"
     environment_vars = [
       "NEWRELIC_LICENSE_KEY=${var.newrelic_license_key}"
     ]
   }
 
   provisioner "shell" {
-    script          = "scripts/05-install-falcon.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
+    script        = "scripts/05-install-falcon.sh"
+    remote_folder = "/var/tmp"
     environment_vars = [
       "FALCON_CID=${var.falcon_cid}",
       "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
@@ -192,54 +186,46 @@ build {
   }
 
   provisioner "shell" {
-    script          = "scripts/05b-install-nessus.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "{{.Vars}} /bin/bash {{.Path}}"
+    script        = "scripts/05b-install-nessus.sh"
+    remote_folder = "/var/tmp"
     environment_vars = [
       "AGENTS_S3_BUCKET=${var.agents_s3_bucket}"
     ]
   }
 
   provisioner "shell" {
-    script          = "scripts/06-configure-nftables.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/06-configure-nftables.sh"
+    remote_folder = "/var/tmp"
   }
 
   provisioner "shell" {
-    script          = "scripts/07-setup-systemd-template.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/07-setup-systemd-template.sh"
+    remote_folder = "/var/tmp"
   }
 
   provisioner "shell" {
-    script          = "scripts/08-setup-ssl-base.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/08-setup-ssl-base.sh"
+    remote_folder = "/var/tmp"
   }
 
   provisioner "shell" {
-    script          = "scripts/09-setup-app-directories.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/09-setup-app-directories.sh"
+    remote_folder = "/var/tmp"
   }
 
   provisioner "shell" {
-    script          = "scripts/10-setup-maintenance-timers.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/10-setup-maintenance-timers.sh"
+    remote_folder = "/var/tmp"
   }
 
   provisioner "shell" {
-    script          = "scripts/11-setup-ad-leave-service.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/11-setup-ad-leave-service.sh"
+    remote_folder = "/var/tmp"
   }
 
   provisioner "shell" {
-    script          = "scripts/99-cleanup.sh"
-    remote_folder   = "/var/tmp"
-    execute_command = "/bin/bash {{.Path}}"
+    script        = "scripts/99-cleanup.sh"
+    remote_folder = "/var/tmp"
   }
 
   # Output manifest
